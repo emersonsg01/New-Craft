@@ -1,0 +1,81 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="New Craft"
+config/description="Mundo aberto procedural em voxels com texturas PBR geradas por codigo."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[autoload]
+
+GameSettings="*res://scripts/settings.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[dotnet]
+
+project/assembly_name="New Craft"
+
+[rendering]
+
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+textures/default_filters/anisotropic_filtering_level=4
+anti_aliasing/quality/use_debanding=true
+environment/defaults/default_clear_color=Color(0.05, 0.07, 0.1, 1)
+
+[shader_globals]
+
+wind_dir={
+"type": "vec2",
+"value": Vector2(1, 0)
+}
+wind_strength={
+"type": "float",
+"value": 0.4
+}
+wind_time={
+"type": "float",
+"value": 0.0
+}
+rain_wetness={
+"type": "float",
+"value": 0.0
+}
+rain_intensity={
+"type": "float",
+"value": 0.0
+}
+parallax_depth={
+"type": "float",
+"value": 0.06
+}
+player_pos={
+"type": "vec3",
+"value": Vector3(0, -1000, 0)
+}
+lod_near={
+"type": "float",
+"value": 1000000.0
+}
+season={
+"type": "float",
+"value": 0.0
+}
+snow_cover={
+"type": "float",
+"value": 0.0
+}
