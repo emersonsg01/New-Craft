@@ -781,6 +781,36 @@ void shade(int layer, ivec2 px) {
 				Hh = 1.0;
 			}
 		}
+		if (var == 8) {
+			// Porta de tabuas com cintas de metal (c2), rebites, dobradicas e argola.
+			vec3 tlv = tile(v, u, 5, 1, 0.0, 11);
+			C = mix(c0, c1, tlv.y * 0.55 + b * 0.45) * (0.88 + 0.16 * g);
+			Hh = 0.5 + 0.25 * sin(fract(u * 5.0) * PI);
+			if (tlv.x < 0.012) {
+				C *= 0.45;
+				Hh = 0.2;
+			}
+			bool strap = abs(v - 0.2) < 0.055 || abs(v - 0.8) < 0.055;
+			bool diag = abs((1.0 - v) - u * 0.6 - 0.2) < 0.04 && v > 0.25 && v < 0.75;
+			if (strap || diag || edge < 0.04) {
+				C = c2 * (0.75 + 0.35 * g + 0.15 * b);
+				MT = 0.95;
+				R = 0.42;
+				Hh = 0.95;
+			}
+			vec2 rv = fract(uv * vec2(5.0, 1.0)) - 0.5;
+			if (strap && abs(rv.x) < 0.09 && (abs(v - 0.2) < 0.022 || abs(v - 0.8) < 0.022)) {
+				C = c2 * 1.35;
+				Hh = 1.0;
+			}
+			float ring = abs(length(uv - vec2(0.82, 0.52)) - 0.06);
+			if (ring < 0.014) {
+				C = c2 * 1.2;
+				MT = 1.0;
+				R = 0.3;
+				Hh = 1.0;
+			}
+		}
 		if (var == 7) {
 			// Porta de ferro: chapas, faixas e rebites.
 			C = mix(c0, c1, b * 0.5 + g * 0.3 + 0.2 * sin(TAU * (v * 30.0 + a * 2.0)));
@@ -972,13 +1002,24 @@ void shade(int layer, ivec2 px) {
 	} else if (pat == 36) {
 		int st = int(P.x + 0.5);
 		bool frame_px = false;
+		bool grid_px = false;
 		if (st == 0) {
 			frame_px = edge < 0.09 || abs(u - 0.5) < 0.035 || abs(v - 0.5) < 0.035;
+		} else if (st == 2) {
+			// Moldura de madeira com grade fina de metal (c2).
+			frame_px = edge < 0.09;
+			grid_px = !frame_px && (abs(fract(u * 3.0) - 0.5) > 0.475 || abs(fract(v * 4.0) - 0.5) > 0.47);
 		} else {
 			frame_px = edge < 0.06 || abs(fract(u * 3.0) - 0.5) > 0.47 || abs(fract(v * 3.0) - 0.5) > 0.47;
 		}
-		if (frame_px) {
-			if (st == 0) {
+		if (grid_px) {
+			C = c2 * (0.8 + 0.3 * g);
+			MT = 0.9;
+			R = 0.38;
+			A = 1.0;
+			Hh = 0.9;
+		} else if (frame_px) {
+			if (st == 0 || st == 2) {
 				planks(c0, c1, v, u, a, b, g);
 				C *= 0.9;
 			} else {

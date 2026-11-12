@@ -4,6 +4,8 @@ extends Control
 
 signal resumed
 signal quit_requested
+## Multijogador (definido pelo main).
+var net: Variant = null
 
 var world: World
 var weather: Weather
@@ -98,7 +100,7 @@ func _show_options() -> void:
 
 	var tabs := HBoxContainer.new()
 	v.add_child(tabs)
-	var names: Array[String] = ["Gráficos", "Desempenho", "Upscaling", "Traçado de raios", "Jogo", "Personagem"]
+	var names: Array[String] = ["Gráficos", "Desempenho", "Upscaling", "Traçado de raios", "Jogo", "Personagem", "Multijogador"]
 	for i in names.size():
 		var b := _button(names[i], func() -> void:
 			_tab = i
@@ -123,6 +125,7 @@ func _show_options() -> void:
 		3: _tab_rt(body)
 		4: _tab_game(body)
 		5: _tab_character(body)
+		6: _tab_multiplayer(body)
 	v.add_child(_button("Voltar", func() -> void:
 		_options.queue_free()
 		_options = null
@@ -418,6 +421,59 @@ func _tab_character(b: Control) -> void:
 	_note(col, "A armadura equipada aparece por cima da roupa. Use F5 no jogo para ver o personagem em terceira pessoa.")
 
 
+func _line(parent: Control, text: String, key: String, w: float = 260.0) -> LineEdit:
+	var h := _row(parent, text)
+	var e := LineEdit.new()
+	e.text = str(GameSettings.get_v(key))
+	e.custom_minimum_size = Vector2(w, 0)
+	e.text_changed.connect(func(t: String) -> void: GameSettings.set_v(key, int(t) if key == "net_port" else t))
+	h.add_child(e)
+	return e
+
+
+func _tab_multiplayer(b: Control) -> void:
+	_line(b, "Seu nome", "net_name")
+	_line(b, "Endereço do servidor (IP)", "net_ip")
+	_line(b, "Porta", "net_port", 120.0)
+	var st := Label.new()
+	st.autowrap_mode = TextServer.AUTOWRAP_WORD
+	b.add_child(st)
+	var refresh := func() -> void:
+		if net == null or not net.active():
+			st.text = "Desconectado. Hospede este mundo para outros entrarem, ou entre no servidor de outra pessoa."
+			return
+		var names: Array = [str(GameSettings.get_v("net_name")) + " (você)"]
+		for pid: int in net.players:
+			names.append(str(net.players[pid]["name"]))
+		var r: String = {"host": "Hospedando este mundo", "client": "Conectado a um servidor"}.get(net.role, net.role)
+		st.text = "%s - %d jogador(es): %s" % [r, names.size(), ", ".join(names)]
+	refresh.call()
+	var h := _row(b, "")
+	var bh := _button("Hospedar este mundo", func() -> void:
+		if net != null and not net.active():
+			net.my_name = str(GameSettings.get_v("net_name"))
+			var err: String = net.host(int(GameSettings.get_v("net_port")))
+			st.text = err if err != "" else "Servidor aberto na porta %d. Os outros jogadores entram pelo seu IP." % int(GameSettings.get_v("net_port")))
+	bh.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(bh)
+	var bj := _button("Entrar no servidor", func() -> void:
+		GameSettings.set_v("net_join", "%s:%d" % [str(GameSettings.get_v("net_ip")), int(GameSettings.get_v("net_port"))])
+		quit_requested.emit())
+	bj.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(bj)
+	var bd := _button("Desconectar", func() -> void:
+		if net != null:
+			net.leave()
+		refresh.call())
+	bd.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.add_child(bd)
+	var tip := Label.new()
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD
+	tip.modulate = Color(1, 1, 1, 0.6)
+	tip.text = "Entrar no servidor salva o mundo atual e recarrega o jogo conectado. Servidor dedicado: rode Servidor.bat (porta 7777 por padrão). Libere a porta no roteador/firewall para jogar pela internet."
+	b.add_child(tip)
+
+
 func _tab_game(b: Control) -> void:
 	_slider(b, "Campo de visão", "fov", 55.0, 110.0, 1.0, "%.0f")
 	_slider(b, "Sensibilidade do mouse", "sensitivity", 0.05, 1.0, 0.05, "%.2f")
@@ -426,7 +482,6 @@ func _tab_game(b: Control) -> void:
 	_toggle(b, "Criaturas", "mobs")
 	_choice(b, "Câmera (V ou F5 alterna)", "camera", [[0, "Primeira pessoa"], [1, "Terceira pessoa (por cima do ombro)"], [2, "Terceira pessoa (de frente)"]])
 	_toggle(b, "Cortar um tronco derruba a árvore inteira", "tree_felling", "Segure Shift ao quebrar para tirar só um bloco.")
-	_choice(b, "Modo de jogo", "mode", [["survival", "Sobrevivência (fome, mineração, criação)"], ["creative", "Criativo (blocos infinitos, voo)"]])
 	_choice(b, "Duração de cada estação", "season_days", [[1, "1 dia"], [3, "3 dias"], [6, "6 dias"], [12, "12 dias"]],
 		"Primavera, verão, outono e inverno mudam a vegetação, a neve e o crescimento das plantações.")
 	if weather != null:

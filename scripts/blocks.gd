@@ -149,7 +149,20 @@ const STAINED_0 := 191
 const DOOR_IRON := 195
 const DOOR_IRON_OPEN := 196
 const MICRO := 197
-const COUNT := 198
+## Laminas de vidraca (2/16 de espessura): vidro, 4 vidros coloridos, 4 vitrais e 2 janelas.
+const PANE_0 := 198
+const PANE_COUNT := 11
+## Portas, janelas e vidracas com variante (madeira/metal/vidro) nos bits 8-15 da forma.
+const DOORV := 209
+const DOORV_OPEN := 210
+const WINDOWV := 211
+const PANEV := 212
+## Ponte levadica (4 x 8): de pe e abaixada. Forma: rotacao (lado para onde abaixa) e parte (bits 16-20).
+const DRAWBRIDGE := 213
+const DRAWBRIDGE_DOWN := 214
+## Pes da cama (a cama ocupa 2 blocos: cabeceira = BED, pes = BED_FOOT).
+const BED_FOOT := 215
+const COUNT := 216
 ## Estagios: trigo/cenoura/batata 0..3, abobora 0..2. Mudas: carvalho, pinheiro, betula, mogno, palmeira, cerejeira.
 const CROP_STAGES := {CROP_WHEAT: 4, CROP_CARROT: 4, CROP_POTATO: 4, CROP_PUMPKIN: 3}
 
@@ -210,6 +223,12 @@ const SH_WALL := 6
 const SH_PANE := 7
 ## Celula micro (8x8x8 voxels); a grade fica em World.Chunk.micro.
 const SH_MICRO := 15
+## Lamina encostada num lado da celula (rotacao: 0 = -Z, 1 = +X, 2 = +Z, 3 = -X).
+const SH_PANE_EDGE := 8
+## Bit de forma dos modelos (portas): centralizado na celula em vez de encostado.
+const SH_CENTER := 64
+## Bit das portas duplas: dobradica do outro lado (a folha da direita abre para a direita).
+const SH_MIRROR := 128
 const PLAYER_SHAPES: Array[int] = [SH_CUBE, SH_SLAB, SH_STAIRS, SH_WEDGE, SH_PILLAR, SH_WALL, SH_PANE]
 const SHAPE_NAMES := {0: "Cubo", 1: "Laje", 2: "Laje", 3: "Escada", 4: "Rampa", 5: "Pilar", 6: "Meia parede", 7: "Painel"}
 
@@ -247,6 +266,21 @@ static var LAYERS: Array[Dictionary] = []
 static var NATURAL_LAYERS := 0
 ## Modelos (moveis etc.): MODELS[id * 4 + rotacao] = Array de [AABB, PackedInt32Array(6 camadas por face)].
 static var MODELS: Dictionary = {}
+## 1 nos blocos de lamina de vidraca.
+static var PANE := PackedByteArray()
+## Origem de cada lamina (bloco de vidro que a produz).
+static var PANE_SRC: Array[int] = []
+## Madeiras das portas/janelas: [nome, escura, clara, tabuas].
+static var WOODS: Array = []
+## Variantes de porta: {"name", "layer", "glass"}; janelas/vidracas: {"name", "layer"}.
+static var DOOR_VARS: Array = []
+static var WIN_VARS: Array = []
+## Camada por variante para blocos de vidro com variante (WINDOWV, PANEV).
+static var VAR_LAYERS: Dictionary = {}
+const IRON_C0 := Color(0.46, 0.48, 0.52)
+const IRON_C1 := Color(0.76, 0.78, 0.82)
+const COPPER_C0 := Color(0.62, 0.32, 0.17)
+const COPPER_C1 := Color(0.92, 0.58, 0.34)
 ## Abas do inventario: nome -> lista de ids.
 static var CATS: Dictionary = {}
 static var PLANT_BOX := AABB(Vector3(0.2, 0.0, 0.2), Vector3(0.6, 0.8, 0.6))
@@ -259,6 +293,169 @@ static var L_SAND := 0
 static var L_SNOW := 0
 static var L_LEAVES := 0
 static var L_PINE_LEAVES := 0
+
+
+static func _build_doors_windows() -> void:
+	WOODS = [
+		["carvalho", Color(0.50, 0.34, 0.18), Color(0.74, 0.55, 0.31), PLANKS],
+		["pinheiro", Color(0.40, 0.25, 0.13), Color(0.60, 0.42, 0.24), PINE_PLANKS],
+		["bétula", Color(0.72, 0.62, 0.42), Color(0.90, 0.82, 0.60), BIRCH_PLANKS],
+		["mogno", Color(0.38, 0.14, 0.09), Color(0.60, 0.26, 0.15), MAHOG_PLANKS],
+		["palmeira", Color(0.60, 0.46, 0.26), Color(0.80, 0.66, 0.42), PALM_PLANKS],
+		["cerejeira", Color(0.66, 0.40, 0.37), Color(0.88, 0.64, 0.60), CHERRY_PLANKS],
+	]
+	# Portas: por madeira -> lisa, com ferro, com cobre, de vidro com moldura de madeira; depois vidro com ferro e com cobre.
+	for w: Array in WOODS:
+		var c0: Color = w[1]
+		var c1: Color = w[2]
+		DOOR_VARS.append({"name": "de " + str(w[0]), "layer": _L(P_FRAMED, c0, c1, c0.darkened(0.35), Vector4(6, 0, 0, 0)), "glass": false, "wood": w[0], "style": "plain"})
+		DOOR_VARS.append({"name": "de %s com ferro" % w[0], "layer": _L(P_FRAMED, c0, c1, IRON_C0, Vector4(8, 0, 0, 0)), "glass": false, "wood": w[0], "style": "iron"})
+		DOOR_VARS.append({"name": "de %s com cobre" % w[0], "layer": _L(P_FRAMED, c0, c1, COPPER_C0, Vector4(8, 0, 0, 0)), "glass": false, "wood": w[0], "style": "copper"})
+		DOOR_VARS.append({"name": "de vidro com %s" % w[0], "layer": _L(P_WINDOW, c0, c1, Color.BLACK, Vector4(0, 0, 0, 0)), "glass": true, "wood": w[0], "style": "glass"})
+	DOOR_VARS.append({"name": "de vidro com ferro", "layer": _L(P_WINDOW, IRON_C0, IRON_C1, Color.BLACK, Vector4(1, 0, 0, 0)), "glass": true, "wood": "", "style": "glass_iron"})
+	DOOR_VARS.append({"name": "de vidro com cobre", "layer": _L(P_WINDOW, COPPER_C0, COPPER_C1, Color.BLACK, Vector4(1, 0, 0, 0)), "glass": true, "wood": "", "style": "glass_copper"})
+	# Janelas: por madeira -> moldura de madeira, com grade de ferro, com grade de cobre.
+	var wl := PackedInt32Array()
+	for w: Array in WOODS:
+		var c0: Color = w[1]
+		var c1: Color = w[2]
+		for k in 3:
+			var metal := Color.BLACK if k == 0 else (IRON_C0 if k == 1 else COPPER_C0)
+			var lay := _L(P_WINDOW, c0, c1, metal, Vector4(0 if k == 0 else 2, 0, 0, 0))
+			var suffix := "" if k == 0 else (" com ferro" if k == 1 else " com cobre")
+			WIN_VARS.append({"name": "de %s%s" % [w[0], suffix], "layer": lay, "wood": w[0], "style": ["plain", "iron", "copper"][k]})
+			wl.append(lay)
+	VAR_LAYERS[WINDOWV] = wl
+	VAR_LAYERS[PANEV] = wl
+	PANE[PANEV] = 1
+	_cube(WINDOWV, "Janela", "", wl[0], wl[0], wl[0], K_GLASS)
+	_cube(PANEV, "Vidraça", "", wl[0], wl[0], wl[0], K_GLASS)
+	_reg(DOORV, "Porta", "", K_MODEL)
+	_reg(DOORV_OPEN, "Porta (aberta)", "", K_MODEL)
+	for f in 6:
+		FACE_LAYER[DOORV * 6 + f] = DOOR_VARS[0]["layer"]
+		FACE_LAYER[DOORV_OPEN * 6 + f] = DOOR_VARS[0]["layer"]
+	# Modelos das portas: fechada encostada em -Z (rotacao 0), aberta com dobradica a esquerda (ou direita se espelhada).
+	for v in DOOR_VARS.size():
+		var lay: int = DOOR_VARS[v]["layer"]
+		var lays := PackedInt32Array([lay, lay, lay, lay, lay, lay])
+		for open in 2:
+			for center in 2:
+				for mirror in 2:
+					var b: AABB
+					if open == 0:
+						b = AABB(Vector3(0, 0, 6.5 if center == 1 else 0) / 16.0, Vector3(16, 16, 3) / 16.0)
+					else:
+						b = AABB(Vector3(13 if mirror == 1 else 0, 0, 0) / 16.0, Vector3(3, 16, 16) / 16.0)
+					for r in 4:
+						MODELS[_door_key(DOORV_OPEN if open == 1 else DOORV, r, center == 1, mirror == 1, v)] = [[_rot_box(b, r), lays]]
+	# Ponte levadica: tabuas escuras com cintas de ferro.
+	var lbr := _L(P_FRAMED, Color(0.30, 0.19, 0.10), Color(0.48, 0.32, 0.17), IRON_C0, Vector4(8, 0, 0, 0))
+	_model(DRAWBRIDGE, "Ponte levadiça", "", [[0, 0, 0, 16, 16, 4, lbr]])
+	_model(DRAWBRIDGE_DOWN, "Ponte levadiça (abaixada)", "", [[0, 0, 0, 16, 4, 16, lbr]])
+	for id: int in [DOORV, DOORV_OPEN, DRAWBRIDGE, DRAWBRIDGE_DOWN]:
+		TOOL[id] = TOOL_AXE
+	TOOL[WINDOWV] = TOOL_AXE
+	TOOL[PANEV] = TOOL_AXE
+
+
+static func _door_key(id: int, r: int, center: bool, mirror: bool, v: int) -> int:
+	return 10000000 + (1000000 if id == DOORV_OPEN else 0) + v * 100 + r * 10 + (2 if center else 0) + (1 if mirror else 0)
+
+
+static func variant(shape: int) -> int:
+	return (shape >> 8) & 255
+
+
+## Camada de uma face para blocos de vidro com variante (-1 = usar a do id).
+static func var_layer(id: int, shape: int) -> int:
+	if not VAR_LAYERS.has(id):
+		return -1
+	var arr: PackedInt32Array = VAR_LAYERS[id]
+	var v := variant(shape)
+	return arr[v] if v < arr.size() else arr[0]
+
+
+## A porta com variante e de vidro (vai para a superficie transparente)?
+static func model_is_glass(id: int, shape: int) -> bool:
+	if id != DOORV and id != DOORV_OPEN:
+		return false
+	var v := variant(shape)
+	return v < DOOR_VARS.size() and bool(DOOR_VARS[v]["glass"])
+
+
+## Versoes centralizadas dos modelos finos (portas): desloca a caixa no eixo mais fino ate o meio.
+static func _center_models(ids: Array) -> void:
+	for id: int in ids:
+		for r in 4:
+			var src: Array = MODELS[id * 4 + r]
+			var bb := AABB()
+			var first := true
+			for mb: Array in src:
+				bb = mb[0] if first else bb.merge(mb[0])
+				first = false
+			var axis := 0
+			if bb.size.z < bb.size[axis]:
+				axis = 2
+			var shift := Vector3.ZERO
+			shift[axis] = 0.5 - (bb.position[axis] + bb.size[axis] * 0.5)
+			var out := []
+			for mb: Array in src:
+				var b: AABB = mb[0]
+				out.append([AABB(b.position + shift, b.size), mb[1]])
+			MODELS[id * 4 + r + 100000] = out
+
+
+## Cerca conectada: estaca no meio e travessas para cada lado ligado.
+## mask: 1 = +X, 2 = -X, 4 = +Z, 8 = -Z.
+static var _fence_cache: Dictionary = {}
+
+
+static func fence_model(mask: int) -> Array:
+	if _fence_cache.has(mask):
+		return _fence_cache[mask]
+	var lays: PackedInt32Array = MODELS[FENCE * 4][0][1]
+	var out := [[AABB(Vector3(6, 0, 6) / 16.0, Vector3(4, 16, 4) / 16.0), lays]]
+	var arms := [[1, Vector3(10, 0, 7), Vector3(6, 0, 2)], [2, Vector3(0, 0, 7), Vector3(6, 0, 2)],
+		[4, Vector3(7, 0, 10), Vector3(2, 0, 6)], [8, Vector3(7, 0, 0), Vector3(2, 0, 6)]]
+	for a: Array in arms:
+		if mask & int(a[0]):
+			for y: int in [6, 12]:
+				var p: Vector3 = a[1]
+				var sz: Vector3 = a[2]
+				out.append([AABB(Vector3(p.x, y, p.z) / 16.0, Vector3(sz.x, 3, sz.z) / 16.0), lays])
+	_fence_cache[mask] = out
+	return out
+
+
+## A cerca se liga a este vizinho? (outra cerca ou bloco solido cheio)
+static func fence_links(nid: int) -> bool:
+	var base := nid & 255
+	return base == FENCE or (nid < 256 and OPQ[base] == 1)
+
+
+## Caixas de colisao/selecao da cerca conectada.
+static func fence_boxes(mask: int) -> Array:
+	var out := []
+	for mb: Array in fence_model(mask):
+		out.append(mb[0])
+	return out
+
+
+## Caixas e camadas de um modelo com a forma dada (rotacao e centralizacao).
+## Direcao (x, z) da cabeceira da cama com a rotacao r (a cabeceira fica do lado oposto ao jogador).
+static func bed_head_dir(r: int) -> Vector2i:
+	return [Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, 0)][r & 3]
+
+
+static func model(id: int, shape: int) -> Array:
+	if id == DOORV or id == DOORV_OPEN:
+		var dk := _door_key(id, (shape >> 4) & 3, (shape & SH_CENTER) != 0, (shape & SH_MIRROR) != 0, mini(variant(shape), DOOR_VARS.size() - 1))
+		return MODELS[dk]
+	var k := id * 4 + ((shape >> 4) & 3)
+	if (shape & SH_CENTER) != 0 and MODELS.has(k + 100000):
+		return MODELS[k + 100000]
+	return MODELS[k]
 
 
 static func L_STONE_FALLBACK() -> int:
@@ -337,6 +534,8 @@ static func _model(id: int, name: String, cat: String, boxes: Array, emit: bool 
 static func _static_init() -> void:
 	KIND.resize(512)
 	KIND.fill(0)
+	PANE.resize(512)
+	PANE.fill(0)
 	OPQ.resize(512)
 	OPQ.fill(0)
 	COVER.resize(512)
@@ -555,7 +754,12 @@ static func _static_init() -> void:
 	_model(STOOL, "Banqueta", D, [[4, 7, 4, 12, 9, 12, oak], [4, 0, 4, 6, 7, 6, dark], [10, 0, 4, 12, 7, 6, dark], [4, 0, 10, 6, 7, 12, dark], [10, 0, 10, 12, 7, 12, dark]])
 	_model(TABLE, "Mesa", D, [[0, 13, 0, 16, 16, 16, oak], [1, 0, 1, 3, 13, 3, dark], [13, 0, 1, 15, 13, 3, dark], [1, 0, 13, 3, 13, 15, dark], [13, 0, 13, 15, 13, 15, dark]])
 	_model(BENCH, "Banco", D, [[0, 6, 3, 16, 8, 13, oak], [0, 0, 4, 2, 6, 12, dark], [14, 0, 4, 16, 6, 12, dark], [0, 8, 11, 16, 14, 13, oak]])
-	_model(BED, "Cama", D, [[0, 0, 0, 16, 5, 16, dark], [0, 5, 0, 16, 8, 16, white], [2, 8, 10, 14, 10, 15, white], [0, 8, 0, 16, 9, 9, red], [0, 5, 15, 16, 13, 16, oak]])
+	# Cama de 2 blocos, cabeceira para +Z: pes de madeira nos cantos, estrado de tabua, colchao branco,
+	# travesseiro e cobertor de la que cobre os pes e metade da cabeceira, com a dobra do lencol.
+	_model(BED, "Cama", D, [[0, 0, 13, 3, 3, 16, dark], [13, 0, 13, 16, 3, 16, dark], [0, 3, 0, 16, 5, 16, oak],
+		[0, 5, 7, 16, 9, 16, white], [2, 9, 10, 14, 11, 15, white], [0, 5, 0, 16, 9, 6, red], [0, 7, 6, 16, 10, 8, white]])
+	_model(BED_FOOT, "Cama (pés)", "", [[0, 0, 0, 3, 3, 3, dark], [13, 0, 0, 16, 3, 3, dark], [0, 3, 0, 16, 5, 16, oak],
+		[0, 5, 0, 16, 9, 16, red], [0, 4, 0, 16, 5, 1, red]])
 	_model(FENCE, "Cerca", D, [[6, 0, 6, 10, 16, 10, oak], [0, 11, 7, 16, 14, 9, oak], [0, 5, 7, 16, 8, 9, oak]])
 	_model(SHELF, "Prateleira", D, [[0, 8, 8, 16, 10, 16, oak], [1, 3, 14, 3, 8, 16, dark], [13, 3, 14, 15, 8, 16, dark]])
 	_model(FLOWER_POT, "Vaso de flor", D, [[5, 0, 5, 11, 6, 11, l_terra], [7, 6, 7, 9, 11, 9, L_LEAVES], [6, 10, 6, 10, 14, 10, red]])
@@ -712,6 +916,20 @@ static func _static_init() -> void:
 	for id: int in [WINDOW_IRON, DOOR_IRON, DOOR_IRON_OPEN]:
 		TOOL[id] = TOOL_PICK
 	TOOL[WINDOW_WOOD] = TOOL_AXE
+	# ---------- laminas de vidracas ----------
+	var pane_src: Array[int] = [GLASS, GLASS_TINT_0, GLASS_TINT_0 + 1, GLASS_TINT_0 + 2, GLASS_TINT_0 + 3,
+		STAINED_0, STAINED_0 + 1, STAINED_0 + 2, STAINED_0 + 3, WINDOW_WOOD, WINDOW_IRON]
+	PANE_SRC = pane_src
+	for i in PANE_COUNT:
+		var src: int = pane_src[i]
+		var pid := PANE_0 + i
+		var nm: String = NAMES[src]
+		nm = "Lâmina de " + nm.substr(0, 1).to_lower() + nm.substr(1)
+		_cube(pid, nm, D, FACE_LAYER[src * 6], FACE_LAYER[src * 6], FACE_LAYER[src * 6], K_GLASS)
+		PANE[pid] = 1
+		TOOL[pid] = TOOL[src]
+	_center_models([DOOR, DOOR_OPEN, DOOR_IRON, DOOR_IRON_OPEN])
+	_build_doors_windows()
 	# Celula micro: material real fica em cada voxel; o id so marca a celula.
 	_cube(MICRO, "Micro-bloco", "", L_STONE_FALLBACK(), -1, -1, K_CUBE)
 	OPQ[MICRO] = 0
@@ -793,6 +1011,8 @@ static func drops(id: int, tool_ok: bool, rng: RandomNumberGenerator) -> Array:
 			return [[DOOR_IRON, 1]]
 		ROSE_BUSH:
 			return [[ROSE_BUSH, 1]]
+	if PANE[id] == 1:
+		return [[id, 1]]
 	if id >= GLASS_TINT_0 and id < GLASS_TINT_0 + 4:
 		return []
 	if KIND[id] == K_LEAVES:
@@ -906,6 +1126,8 @@ static func _build_shapes() -> void:
 				boxes.append(AABB(Vector3(0, 0, 0.5), Vector3(1, 1, 0.5)))
 			SH_PANE:
 				boxes.append(AABB(Vector3(0, 0, 7.0 / 16.0), Vector3(1, 1, 2.0 / 16.0)))
+			SH_PANE_EDGE:
+				boxes.append(AABB(Vector3(0, 0, 0), Vector3(1, 1, 2.0 / 16.0)))
 			_:
 				boxes.append(UNIT_BOX)
 		var out: Array[AABB] = []
@@ -922,7 +1144,7 @@ static func boxes(id: int, shape: int) -> Array:
 	var k := KIND[id]
 	if k == K_MODEL:
 		var out := []
-		for mb: Array in MODELS[id * 4 + ((shape >> 4) & 3)]:
+		for mb: Array in model(id, shape):
 			out.append(mb[0])
 		return out
 	if k == K_PLANT:
@@ -936,7 +1158,7 @@ static func can_shape(id: int) -> bool:
 	if id >= 256:
 		return false
 	if KIND[id] == K_GLASS:
-		return id != PORTAL_FIRE and id != PORTAL_ASTRAL
+		return id != PORTAL_FIRE and id != PORTAL_ASTRAL and PANE[id] == 0 and not VAR_LAYERS.has(id)
 	return KIND[id] == K_CUBE
 
 
@@ -947,6 +1169,8 @@ static func door_toggle(id: int) -> int:
 		DOOR_OPEN: return DOOR
 		DOOR_IRON: return DOOR_IRON_OPEN
 		DOOR_IRON_OPEN: return DOOR_IRON
+		DOORV: return DOORV_OPEN
+		DOORV_OPEN: return DOORV
 	return 0
 
 

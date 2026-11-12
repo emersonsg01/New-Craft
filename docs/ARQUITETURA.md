@@ -22,6 +22,17 @@ GameSettings (autoload, settings.gd): opções, perfil automático por hardware,
 
 - **Chunk:** 16 × 128 × 16 blocos em `PackedByteArray`, com índice `y * 256 + z * 16 + x`.
 - **Formas** (`Chunk.shapes`): dicionário `idx -> int`. Os bits 0–3 são o tipo (`SH_*`) e os bits 4–5 a rotação.
+- **Formas finas:**
+  - `SH_PANE` (7): lâmina centralizada;
+  - `SH_PANE_EDGE` (8): lâmina encostada num lado (rotação 0 = −Z, 1 = +X, 2 = +Z, 3 = −X);
+  - bit `SH_CENTER` (64) nos modelos: porta centralizada, com caixas pré-calculadas por `Blocks._center_models` e lidas por `Blocks.model(id, forma)`.
+  - As lâminas são os blocos `PANE_0 … PANE_0 + 10` (`Blocks.PANE`, `Blocks.PANE_SRC`), e `Player.thin_placement` escolhe o lado ou o centro pelo ponto clicado.
+- **Blocos com variante:** `DOORV`/`DOORV_OPEN` (portas), `WINDOWV` (janela), `PANEV` (vidraça), `DRAWBRIDGE`/`DRAWBRIDGE_DOWN` (ponte levadiça).
+  - Bits 8–15 da forma: a variante (`Blocks.DOOR_VARS`, `Blocks.WIN_VARS`). As camadas de textura ficam em `Blocks.VAR_LAYERS`.
+  - Bit `SH_MIRROR` (128): a folha da direita de portas duplas e portões.
+  - Bits 16–20 na ponte: a parte da estrutura (coluna e altura).
+  - No inventário, cada variante é um item (`kind` `door`, `window`, `drawbridge`). `Items.for_variant` faz o caminho inverso, do bloco para o item.
+  - Abrir uma porta afeta todas as células ligadas (`Player.door_cells`). A ponte gira numa animação (`Player.toggle_drawbridge`) e depois os blocos são trocados.
 - **Micro-células** (`Chunk.micro`): dicionário `idx -> PackedByteArray(512)`. O bloco recebe o id `Blocks.MICRO` e a forma `SH_MICRO` (15). Cada byte da grade 8×8×8 é o id do material daquele voxel (0 = vazio). Veja `scripts/micro.gd`.
 - **Edições:**
   - `World.all_mods[dim][chunk][idx] = id | forma << 8`;
@@ -35,6 +46,9 @@ GameSettings (autoload, settings.gd): opções, perfil automático por hardware,
 1. **GPU** (`gpu_world_gen.gd`, `wg_shaders.gd`): um `RenderingDevice` local, numa thread própria, roda o compute shader do chunk. Ele calcula relevo, biomas, cavernas, rochas, minérios, flores e água. A dimensão é escolhida por push constant (superfície, ígnea ou etérea).
 2. **CPU** (`world_gen.gd: finish`): tarefas no `WorkerThreadPool` adicionam árvores por espécie e bioma, arbustos e abóboras, e micro-detalhes (pedrinhas, galhos, raízes). Em seguida aplicam as estruturas (`structures.gd: stamp`), os peitoris e as edições salvas.
 3. **Estruturas** (`structures.gd`): grade de células de 256 blocos. Cada célula pode ter uma vila, um acampamento, uma ruína ou uma pirâmide, com paletas por bioma (planície, floresta, cerejeira, deserto, neve, bandidos, ruína). Os templates são rotacionados e carimbados nos chunks que tocam.
+   - Os templates podem incluir micro-células `[x, y, z, Blocks.MICRO, SH_MICRO, grade]`. A grade é girada com `Micro.rotate_y` e vai para `res["micro_s"]`.
+   - Blocos luminosos carimbados entram em `res["lights"]`. `World._drain` cria uma `OmniLight3D` para cada um, com cor por tipo e `distance_fade`.
+   - A rotação das formas preserva os bits de centralização, espelho e variante. Por isso as portas e janelas das vilas mantêm a madeira da paleta (`door_v`, `win_v`).
 4. **Terreno distante** (`far_terrain.gd`): tiles em quadtree (raiz de 8192 e mínimo de 128). A altura é recalculada no vertex shader com o mesmo ruído da GPU, e a transição para os voxels usa pontilhado em `lod_near`.
 
 ## Malha (`chunk_mesher.gd`)
@@ -100,6 +114,8 @@ Parâmetros globais (`project.godot`): `wind_*`, `rain_*`, `parallax_depth`, `pl
   - Humanoide com penteados, barbas, roupas, chapéus e armaduras por material.
   - Quadrúpede genérico com olhos (esclera, pupila, pálpebra), cascos e extras presos à cabeça.
   - Aves, aranha, gosma, espectro e barco.
+- Articulações: uma parte pode ter `parent_i` e pender de outra. `Rigs._split_limbs` divide braços e pernas em segmentos (grupos `armA`/`armA2`, `legA`/`legA2`). `VoxelRig` monta a hierarquia e anima joelhos, cotovelos, o balanço do corpo, a inclinação, o olhar (`look_yaw`) e a pose montada (`pose = "ride"`).
+- Raças com pelagem desenhada por variante: `Rigs._breed` e `Rigs._monster`. As selas são desenhadas por `Rigs._add_saddle` sobre o ponto `back` que o `quad()` devolve.
 - `voxel_rig.gd`: animações procedurais (bípede, quadrúpede com pastar e rabo, ave, aranha, salto, flutuar).
 
 ## Jogador (`player.gd`) e atributos (`stats.gd`)
@@ -113,7 +129,28 @@ Parâmetros globais (`project.godot`): `wind_*`, `rain_*`, `parallax_depth`, `pl
 
 - `DEFS` define vida, velocidade, comportamento (hostil, neutro, assustadiço, voador, saltador), dano, saque e se a criatura queima ao sol.
 - IA simples: vagar, fugir, perseguir, atacar e atirar. Os aldeões ficam presos à vila e fazem trocas (`TRADES`).
+- Aldeões: a vila (`structures.gd`) anexa a cada morador um dicionário extra (`center` da praça, `home` = posto de trabalho, `face` = ponto que ele encara, `plot` = lote do construtor) e a paleta; `pending_npcs` leva `[pos, espécie, semente, vila, extra, paleta]`. Moradores cujo chunk ainda não carregou (mineradores na câmara da mina) esperam na fila.
+- `Mob._npc_job` decide antes do passeio: conversa (pares frente a frente com balão `Label3D`, um fala por vez), ronda do guarda (`_patrol`, 8 pontos num círculo de raio 21 em volta da praça), obra do construtor (`_build`: primeiro `world.village_damage`, gravado em `player._break_block` para blocos de construção quebrados, depois `Structures.plan_blocks` da casa no lote, de baixo para cima) e o ciclo trabalhar/folgar. `_steer` desvia de obstáculos; o construtor que não progride por ~9 s reaparece perto da obra.
+- Vozes (`voices.gd`): sintetizador estático — fonte vocal (serra/pulso/seno com vibrato, tremor, jitter, aspereza e sopro) por 3 formantes em filtro de estado variável, ruído filtrado, sino FM, sequência, mistura e eco. `_design(especie)` monta os sons por evento (`idle`, `hurt`, `death`, `attack`, `talk`, `night`); cada espécie é gerada numa tarefa do `WorkerThreadPool` na primeira vez que aparece (`get_sound` devolve null até ficar pronto). `Mob.voice()` toca num `AudioStreamPlayer3D` próprio; `Mobs.VOICE` define intervalo dos sons a toa e volume por espécie.
+- `NPC_HANDS` diz o que cada profissão segura; `VoxelRig.hold` prende o item no antebraço com o mesmo encaixe do personagem do jogador. O minerador leva também uma luz. `TRADES` tem várias ofertas por profissão; `trade_id` converte nomes em itens ou blocos (`TRADE_BLOCKS`).
 - `Arrow` cobre flechas, projéteis de criaturas e o feitiço arcano (sem gravidade e com luz). Abates do jogador dão XP, e a Percepção aumenta o saque.
+
+## Modelos do Blockbench
+
+- As criaturas (animais e monstros, todas as variantes) ficam em `assets/blockbench/<especie>_<variante>.bbmodel`, no formato "Modelo padrão" do Blockbench. Os grupos são os ossos, com a articulação no `origin`. O nome antes de `__` define o grupo de animação (`legA`, `legA2`, `head`, `tailz`...).
+- `scripts/bbmodel.gd` lê o `.bbmodel` direto, inclusive arquivos salvos pelo Blockbench 4.x e 5.x, e monta os nós e as malhas com a textura embutida. O shader é `voxel_tex.gdshader`, com filtro nítido, recorte de transparência e clarão de dano. `Rigs.mob` usa o `.bbmodel` quando ele existe; a sela continua sendo desenhada por cima.
+- `assets/blockbench/creatures.json` guarda, para cada modelo, a animação, a escala, a pose e o ponto da sela.
+- `tools/bb_export_specs.gd` gera os `.bbmodel` a partir dos desenhos de `Rigs`, com 8 px por voxel e atlas de até 1024 px. Sem `--force`, preserva os arquivos que já existem, para não apagar edições feitas no Blockbench.
+  - `godot --headless --path . --script res://tools/bb_export_specs.gd -- --force`
+- **Redesenho no Blockbench:** `tools/bb_designer.js` é uma biblioteca que roda dentro do Blockbench, pelo MCP (`risky_eval`) ou pelo console. Ela monta um modelo a partir de peças (cubos girados em ossos), pinta a textura em alta resolução (8 px por unidade, atlas até 1024) e salva o `.bbmodel`. Os designs de cada espécie ficam em `tools/bb_designs/<especie>.js`; prontos: `cavalo.js` (7 pelagens) e `animais.js` (vaca, porco, ovelha, cabra, cervo, burro, camelo, lobo, raposa, urso, coelho, galinha e pato, com todas as raças).
+  - Os modelos redesenhados não devem ser regenerados com `bb_export_specs.gd -- --force`, que os substituiria pelos desenhos antigos. As versões geradas anteriores do cavalo ficam em `assets/blockbench/_gerado/`.
+- Para editar: abra o `.bbmodel` no Blockbench, mude cubos, ossos ou textura e salve. O jogo usa a versão nova na próxima vez que carregar.
+
+## Montaria e materiais mistos
+
+- `Mobs.DEFS[*]["ride"/"seat"/"jump"]` marcam as montarias. `Mob.set_saddle(item)` redesenha o animal com a sela. Com `Mob.rider` definido, `Mob._ride` lê o teclado e move o animal, e o `Player` fica em `vehicle` com a altura `seat_h`.
+- `Items.MIXED`, `Items.ARMOR_MATS2` e `Items.SADDLES` são adicionados no fim de `Items._static_init`, para não mudar os ids dos itens antigos.
+- As variantes de portas e janelas também são geradas em `Items`, na mesma ordem de `Blocks.DOOR_VARS`/`WIN_VARS`, para não depender da ordem de inicialização das classes.
 
 ## Desempenho
 

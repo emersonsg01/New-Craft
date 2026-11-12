@@ -44,6 +44,7 @@ static func _static_init() -> void:
 	GROUPS["#la"] = range(Blocks.WOOL_0, Blocks.WOOL_0 + 12)
 	GROUPS["#combustivel"] = [Items.find("Carvão"), Blocks.COAL_BLOCK, Items.find("Pó de brasa")] + GROUPS["#tabuas"] + GROUPS["#troncos"]
 	GROUPS["#pedras"] = [Blocks.COBBLE, Blocks.STONE, Blocks.GRANITE, Blocks.BASALT, Blocks.LIMESTONE, Blocks.SLATE]
+	GROUPS["#obsidiana"] = [Blocks.OBSIDIAN]
 
 	# ---------- basico ----------
 	var logs := [Blocks.LOG, Blocks.PINE_LOG, Blocks.BIRCH_LOG, Blocks.MAHOG_LOG, Blocks.PALM_LOG, Blocks.CHERRY_LOG]
@@ -77,6 +78,21 @@ static func _static_init() -> void:
 	# ---------- comida e agricultura ----------
 	_r("Pão", 1, ["Trigo", 3], "", "Comida")
 	_r("Torta de abóbora", 1, [Blocks.PUMPKIN, 1, "Trigo", 2], "bancada", "Comida")
+	_r("Torta de abóbora", 2, [Blocks.PUMPKIN, 1, "Trigo", 2, "Ovo", 1], "bancada", "Comida")
+	_r("Tesoura", 1, ["Lingote de ferro", 2], "", "Ferramentas")
+	_r("Tecido", 1, ["#la", 2], "", "Itens")
+	_r("Couro curtido", 2, ["Couro", 2, "Carvão", 1], "bancada", "Itens")
+	_r("Chapéu de palha", 1, ["Trigo", 5], "bancada", "Roupas")
+	_r("Capuz", 1, ["Tecido", 3], "bancada", "Roupas")
+	_r("Gorro", 1, ["Tecido", 2], "bancada", "Roupas")
+	_r("Bandana", 1, ["Tecido", 1], "bancada", "Roupas")
+	_r("Túnica", 1, ["Tecido", 4], "bancada", "Roupas")
+	_r("Avental", 1, ["Couro curtido", 3], "bancada", "Roupas")
+	_r("Manto", 1, ["Tecido", 6], "bancada", "Roupas")
+	_r("Colete", 1, ["Couro curtido", 2, "Tecido", 2], "bancada", "Roupas")
+	_r("Escudo de madeira", 1, ["#tabuas", 5, "Couro", 1], "bancada", "Armas")
+	_r("Escudo de ferro", 1, ["Lingote de ferro", 5, "#tabuas", 1], "bigorna", "Armas")
+	_r("Capacete de minerador", 1, ["Lingote de ferro", 4, Blocks.LANTERN, 1], "bancada", "Armaduras")
 	_r("Sementes de abóbora", 4, [Blocks.PUMPKIN, 1], "", "Comida")
 	_r(Blocks.HAY, 1, ["Trigo", 9], "", "Comida")
 	_r("Trigo", 9, [Blocks.HAY, 1], "", "Comida")
@@ -88,7 +104,7 @@ static func _static_init() -> void:
 		var mt: String = m[0]
 		var it: Variant = m[1]
 		_r("Picareta de " + mt, 1, [it, 3, "Graveto", 2], "bancada", "Ferramentas")
-		_r("Machado de " + mt, 1, [it, 3, "Graveto", 2], "bancada", "Ferramentas")
+		_r("Machado de " + mt, 1, [it, 3, "Graveto", 1], "bancada", "Ferramentas")
 		_r("Pá de " + mt, 1, [it, 1, "Graveto", 2], "bancada", "Ferramentas")
 		_r("Enxada de " + mt, 1, [it, 2, "Graveto", 2], "bancada", "Ferramentas")
 		var st := "bigorna" if mt in ["ferro", "ouro", "cristal"] else "bancada"
@@ -96,7 +112,49 @@ static func _static_init() -> void:
 		_r("Adaga de " + mt, 1, [it, 1, "Graveto", 1], st, "Armas")
 		_r("Lança de " + mt, 1, [it, 1, "Graveto", 3], st, "Armas")
 		_r("Machado de guerra de " + mt, 1, [it, 4, "Graveto", 2], st, "Armas")
-		_r("Maça de " + mt, 1, [it, 3, "Graveto", 2], st, "Armas")
+		_r("Maça de " + mt, 1, [it, 4, "Graveto", 1], st, "Armas")
+	# Materiais mistos: ingredientes e equipamentos.
+	_r("Lingote de aço", 2, ["Lingote de ferro", 2, "Carvão", 1], "bigorna", "Itens")
+	_r("Lingote de bronze", 4, ["Lingote de cobre", 3, "Lingote de ferro", 1], "bancada", "Itens")
+	_r("Lingote de ferro dourado", 2, ["Lingote de ferro", 1, "Lingote de ouro", 1], "bigorna", "Itens")
+	_r("Cristal rubi", 1, ["Cristal", 1, "Rubi", 1], "bigorna", "Itens")
+	_r("Couro tachado", 2, ["Couro", 2, "Lingote de ferro", 1], "bancada", "Itens")
+	var all_mats := mats.duplicate()
+	for m: Array in Items.MIXED:
+		all_mats.append([m[0], m[7]])
+		var mt: String = m[0]
+		var it: Variant = m[7]
+		_r("Picareta de " + mt, 1, [it, 3, "Graveto", 2], "bancada", "Ferramentas")
+		_r("Machado de " + mt, 1, [it, 3, "Graveto", 1], "bancada", "Ferramentas")
+		_r("Pá de " + mt, 1, [it, 1, "Graveto", 2], "bancada", "Ferramentas")
+		_r("Enxada de " + mt, 1, [it, 2, "Graveto", 2], "bancada", "Ferramentas")
+		_r("Espada de " + mt, 1, [it, 2, "Graveto", 1], "bigorna", "Armas")
+		_r("Adaga de " + mt, 1, [it, 1, "Graveto", 1], "bigorna", "Armas")
+		_r("Lança de " + mt, 1, [it, 1, "Graveto", 3], "bigorna", "Armas")
+		_r("Machado de guerra de " + mt, 1, [it, 4, "Graveto", 2], "bigorna", "Armas")
+		_r("Maça de " + mt, 1, [it, 4, "Graveto", 1], "bigorna", "Armas")
+	for m: Array in all_mats:
+		var mt: String = m[0]
+		var it: Variant = m[1]
+		var st := "bancada" if mt in ["madeira", "pedra", "osso"] else "bigorna"
+		_r("Martelo de guerra de " + mt, 1, [it, 5, "Graveto", 2], st, "Armas")
+		_r("Alabarda de " + mt, 1, [it, 2, "Graveto", 3], st, "Armas")
+		_r("Sabre de " + mt, 1, [it, 3, "Graveto", 3], st, "Armas")
+		_r("Foice de guerra de " + mt, 1, [it, 4, "Graveto", 3], st, "Armas")
+	_r("Besta", 1, ["#tabuas", 3, "Lingote de ferro", 2, "Corrente", 1], "bancada", "Armas")
+	for m: Array in Items.ARMOR_MATS2:
+		var an: String = m[0]
+		_r("Capacete de " + an, 1, [m[4], 5], "bigorna", "Armaduras")
+		_r("Peitoral de " + an, 1, [m[4], 8], "bigorna", "Armaduras")
+		_r("Calças de " + an, 1, [m[4], 7], "bigorna", "Armaduras")
+		_r("Botas de " + an, 1, [m[4], 4], "bigorna", "Armaduras")
+	# Selas.
+	_r("Sela de couro", 1, ["Couro", 5, "Lingote de ferro", 1], "bancada", "Montaria")
+	_r("Sela de couro com ferro", 1, ["Couro", 4, "Lingote de ferro", 3], "bancada", "Montaria")
+	_r("Sela de couro com cobre", 1, ["Couro", 4, "Lingote de cobre", 3], "bancada", "Montaria")
+	_r("Sela cerimonial de ouro", 1, ["Couro", 4, "Lingote de ouro", 3, "#la", 1], "bancada", "Montaria")
+	_r("Sela de viagem", 1, ["Couro", 6, "#la", 2, "Lingote de ferro", 1], "bancada", "Montaria")
+	_r("Sela de guerra de aço", 1, ["Couro", 3, "Lingote de aço", 4, "#la", 1], "bigorna", "Montaria")
 	_r("Arco", 1, ["Graveto", 3, "Couro", 1], "bancada", "Armas")
 	_r("Flecha", 4, ["Pederneira", 1, "Graveto", 1, "Pena", 1], "", "Armas")
 	var amats := [["couro", "Couro"], ["cobre", "Lingote de cobre"], ["ferro", "Lingote de ferro"], ["ouro", "Lingote de ouro"], ["cristal", "Cristal"]]
@@ -146,9 +204,31 @@ static func _static_init() -> void:
 	for i in 6:
 		_r(chest_ids[i], 1, [planks[i], 8], "bancada", "Móveis")
 	_r(Blocks.CHEST_IRON, 1, ["Lingote de ferro", 6, "#tabuas", 2], "bancada", "Móveis")
-	_r(Blocks.DOOR, 2, ["#tabuas", 6], "bancada", "Móveis")
 	_r(Blocks.DOOR_IRON, 2, ["Lingote de ferro", 6], "bancada", "Móveis")
-	_r(Blocks.WINDOW_WOOD, 2, [Blocks.GLASS, 2, "#tabuas", 2], "bancada", "Móveis")
+	# ---------- portas, janelas, vidracas, correntes e ponte levadica ----------
+	_r("Corrente", 2, ["Lingote de ferro", 2], "bancada", "Portas")
+	_r("Ponte levadiça", 1, ["#troncos", 3, "Lingote de ferro", 3, "Corrente", 3], "bancada", "Portas")
+	for w: Array in Blocks.WOODS:
+		var pl: int = w[3]
+		var wn: String = w[0]
+		_r("Porta de " + wn, 3, [pl, 6], "bancada", "Portas")
+		_r("Porta de %s com ferro" % wn, 2, [pl, 4, "Lingote de ferro", 2], "bancada", "Portas")
+		_r("Porta de %s com cobre" % wn, 2, [pl, 4, "Lingote de cobre", 2], "bancada", "Portas")
+		_r("Porta de vidro com " + wn, 2, [pl, 4, Blocks.GLASS, 2], "bancada", "Portas")
+		_r("Janela de " + wn, 2, [pl, 2, Blocks.GLASS, 2], "bancada", "Janelas")
+		_r("Janela de %s com ferro" % wn, 2, [pl, 2, "Lingote de ferro", 1, Blocks.GLASS, 2], "bancada", "Janelas")
+		_r("Janela de %s com cobre" % wn, 2, [pl, 2, "Lingote de cobre", 1, Blocks.GLASS, 2], "bancada", "Janelas")
+	_r("Porta de vidro com ferro", 2, ["Lingote de ferro", 4, Blocks.GLASS, 2], "bancada", "Portas")
+	_r("Porta de vidro com cobre", 2, ["Lingote de cobre", 4, Blocks.GLASS, 2], "bancada", "Portas")
+	for dv: Dictionary in Blocks.DOOR_VARS:
+		var nm: String = dv["name"]
+		_r("Porta dupla " + nm, 1, ["Porta " + nm, 2], "bancada", "Portas")
+		_r("Portão grande " + nm, 1, ["Porta dupla " + nm, 2], "bancada", "Portas")
+	for wv: Dictionary in Blocks.WIN_VARS:
+		_r("Vidraça " + str(wv["name"]), 36, ["Janela " + str(wv["name"]), 6], "bancada", "Janelas")
+	# Laminas de vidraca: 6 blocos (duas fileiras de 3) rendem 36 laminas.
+	for i in Blocks.PANE_COUNT:
+		_r(Blocks.PANE_0 + i, 36, [Blocks.PANE_SRC[i], 6], "bancada", "Construção")
 	_r(Blocks.WINDOW_IRON, 2, [Blocks.GLASS, 2, "Lingote de ferro", 1], "bancada", "Móveis")
 	_r(Blocks.STAINED_0, 4, [Blocks.GLASS_TINT_0, 1, Blocks.GLASS_TINT_0 + 1, 1, Blocks.GLASS_TINT_0 + 2, 1, Blocks.GLASS_TINT_0 + 3, 1], "bancada", "Móveis")
 	_r(Blocks.STAINED_0 + 1, 4, [Blocks.GLASS_TINT_0, 2, Blocks.GLASS_TINT_0 + 3, 2], "bancada", "Móveis")

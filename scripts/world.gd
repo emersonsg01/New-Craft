@@ -36,6 +36,10 @@ var all_mods: Dictionary = {0: {}, 1: {}, 2: {}}
 ## Celulas micro editadas: dim -> {chunk -> {idx -> PackedByteArray}}.
 var all_micro: Dictionary = {0: {}, 1: {}, 2: {}}
 var micro_mods: Dictionary = {}
+## Multijogador: rede (ou null), se este peer simula liquidos/plantacoes, e trava para nao reenviar edicoes recebidas.
+var net: Variant = null
+var simulate := true
+var _net_mute := false
 var dim := 0
 ## Conteudo dos baus: Vector4i(x, y, z, dim) -> Inventory.
 var containers: Dictionary = {}
@@ -45,6 +49,8 @@ var loot_pos: Dictionary = {}
 var ticks: Dictionary = {}
 ## NPCs gerados pelas vilas, aguardando o gerenciador de criaturas.
 var pending_npcs: Array = []
+## Blocos de construcoes de vila quebrados pelo jogador: [pos, id, forma]; o construtor conserta.
+var village_damage: Array = []
 ## Multiplicador de crescimento definido pela estacao do ano.
 var season_growth := 1.0
 ## Fornalhas: Vector4i -> {"inv": Inventory(3) [entrada, combustivel, saida], "burn", "burn_max", "cook"}.
@@ -224,19 +230,21 @@ func _process(_dt: float) -> void:
 	if _budget_t >= 2.0:
 		_budget_t = 0.0
 		_update_budget()
-	_tick_t += _dt
-	if _tick_t >= 1.0:
-		_tick_t = 0.0
-		_random_ticks()
 	_tick_furnaces(_dt)
-	_water_t += _dt
-	_lava_t += _dt
-	if _water_t >= 0.2:
-		_water_t = 0.0
-		_step_fluids(1)
-	if _lava_t >= 0.9:
-		_lava_t = 0.0
-		_step_fluids(2)
+	# Plantacoes e liquidos: so quem simula o mundo (no multijogador, o host ou o simulador).
+	if simulate:
+		_tick_t += _dt
+		if _tick_t >= 1.0:
+			_tick_t = 0.0
+			_random_ticks()
+		_water_t += _dt
+		_lava_t += _dt
+		if _water_t >= 0.2:
+			_water_t = 0.0
+			_step_fluids(1)
+		if _lava_t >= 0.9:
+			_lava_t = 0.0
+			_step_fluids(2)
 	if _frame % 60 == 0:
 		_unload_far()
 
@@ -283,6 +291,10 @@ func _drain() -> void:
 		_last_chunk = null
 		_last_key = Vector2i(999999, 999999)
 		_spawn_lights(c)
+		# Lanternas, tochas e abajures das construcoes acendem de verdade.
+		for idx: int in d.get("lights", []):
+			if not c.lights.has(idx) and Blocks.EMIT[c.blocks[idx]] == 1:
+				_add_light(c, idx)
 	for r: Array in mr:
 		_mesh_inflight -= 1
 		var c: Chunk = chunks.get(r[0])
@@ -505,6 +517,8 @@ func set_block(p: Vector3i, id: int, shape: int = 0) -> bool:
 	var idx := p.y * 256 + lz * 16 + lx
 	if c.blocks[idx] == Blocks.BEDROCK:
 		return false
+	if (shape & 15) == 0 and id < 256 and Blocks.PANE[id] == 1:
+		shape |= Blocks.SH_PANE
 	var old := c.blocks[idx]
 	c.blocks[idx] = id
 	if c.micro.has(idx) and id != Blocks.MICRO:
@@ -541,7 +555,22 @@ func set_block(p: Vector3i, id: int, shape: int = 0) -> bool:
 			if n != null and n.has_data:
 				n.dirty = true
 				_urgent.append(n.key)
+	if net != null and not _net_mute and id != Blocks.MICRO:
+		net.send_edit(dim, p, id, shape, PackedByteArray())
 	return true
+
+
+## Lados em que a cerca em (x, y, z) se conecta (1 +X, 2 -X, 4 +Z, 8 -Z).
+func fence_mask(x: int, y: int, z: int) -> int:
+	var m := 0
+	for k in 4:
+		var d: Vector2i = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)][k]
+		var nid := get_block(x + d.x, y, z + d.y)
+		if nid > 0 and get_shape(x + d.x, y, z + d.y) != 0:
+			nid |= 0x100
+		if Blocks.fence_links(nid):
+			m |= 1 << k
+	return m
 
 
 func get_micro(x: int, y: int, z: int) -> Variant:
@@ -560,7 +589,11 @@ func set_micro(p: Vector3i, g: PackedByteArray) -> bool:
 		return set_block(p, Blocks.AIR)
 	if u > 0:
 		return set_block(p, u)
-	if not set_block(p, Blocks.MICRO, Blocks.SH_MICRO):
+	var was := _net_mute
+	_net_mute = true
+	var ok := set_block(p, Blocks.MICRO, Blocks.SH_MICRO)
+	_net_mute = was
+	if not ok:
 		return false
 	var c := _chunk_at(p.x, p.z)
 	var idx := p.y * 256 + (p.z & 15) * 16 + (p.x & 15)
@@ -569,7 +602,34 @@ func set_micro(p: Vector3i, g: PackedByteArray) -> bool:
 	if not micro_mods.has(c.key):
 		micro_mods[c.key] = {}
 	micro_mods[c.key][idx] = g.duplicate()
+	if net != null and not _net_mute:
+		net.send_edit(dim, p, Blocks.MICRO, Blocks.SH_MICRO, g)
 	return true
+
+
+## Edicao vinda de outro jogador: aplica sem reenviar; fora dos chunks carregados, guarda para quando gerarem.
+func apply_remote(d: int, p: Vector3i, id: int, sh: int, g: PackedByteArray) -> void:
+	if d == dim and _chunk_at(p.x, p.z) != null:
+		_net_mute = true
+		if g.size() == Micro.SIZE:
+			set_micro(p, g)
+		else:
+			set_block(p, id, sh)
+		_net_mute = false
+		return
+	var key := Vector2i(p.x >> 4, p.z >> 4)
+	var idx := p.y * 256 + (p.z & 15) * 16 + (p.x & 15)
+	var am: Dictionary = all_mods[d]
+	if not am.has(key):
+		am[key] = {}
+	am[key][idx] = id | (sh << 8)
+	var mm: Dictionary = all_micro[d]
+	if g.size() == Micro.SIZE:
+		if not mm.has(key):
+			mm[key] = {}
+		mm[key][idx] = g.duplicate()
+	elif mm.has(key):
+		mm[key].erase(idx)
 
 
 func _micro_boxes(c: Chunk, idx: int) -> Array:
@@ -580,18 +640,36 @@ func _micro_boxes(c: Chunk, idx: int) -> Array:
 
 
 func _add_light(c: Chunk, idx: int) -> void:
+	if c.lights.has(idx):
+		return
 	var l := OmniLight3D.new()
 	var bid := c.blocks[idx]
-	if bid == Blocks.PORTAL_FIRE:
-		l.light_color = Color(1.0, 0.45, 0.15)
-	elif bid == Blocks.PORTAL_ASTRAL:
-		l.light_color = Color(0.45, 0.70, 1.0)
-	else:
-		l.light_color = Color(1.0, 0.72, 0.38)
 	l.light_energy = 2.6
 	l.omni_range = 13.0
+	match bid:
+		Blocks.PORTAL_FIRE:
+			l.light_color = Color(1.0, 0.45, 0.15)
+		Blocks.PORTAL_ASTRAL:
+			l.light_color = Color(0.45, 0.70, 1.0)
+		Blocks.TORCH, Blocks.CAMPFIRE:
+			l.light_color = Color(1.0, 0.58, 0.24)
+			l.light_energy = 2.2
+			l.omni_range = 10.0
+		Blocks.LAMP:
+			l.light_color = Color(1.0, 0.86, 0.62)
+			l.omni_range = 11.0
+		Blocks.FURNACE:
+			l.light_color = Color(1.0, 0.50, 0.20)
+			l.light_energy = 1.4
+			l.omni_range = 7.0
+		_:
+			l.light_color = Color(1.0, 0.74, 0.40)
 	l.omni_attenuation = 1.4
 	l.shadow_enabled = false
+	# Luzes distantes somem aos poucos (economiza GPU com muitas vilas carregadas).
+	l.distance_fade_enabled = true
+	l.distance_fade_begin = 48.0
+	l.distance_fade_length = 16.0
 	l.position = Vector3(c.key.x * 16 + (idx & 15) + 0.5, (idx >> 8) + 0.45, c.key.y * 16 + ((idx >> 4) & 15) + 0.5)
 	add_child(l)
 	c.lights[idx] = l
@@ -1050,7 +1128,7 @@ func get_boxes(a: AABB) -> Array[AABB]:
 					for b: AABB in _micro_boxes(c, idx):
 						out.append(AABB(b.position + Vector3(x, y, z), b.size))
 				else:
-					for b: AABB in Blocks.boxes(id, sh):
+					for b: AABB in (Blocks.fence_boxes(fence_mask(x, y, z)) if id == Blocks.FENCE else Blocks.boxes(id, sh)):
 						out.append(AABB(b.position + Vector3(x, y, z), b.size))
 	return out
 
@@ -1116,7 +1194,7 @@ func raycast(origin: Vector3, dir: Vector3, max_dist: float) -> Dictionary:
 				return {"pos": p, "normal": normal, "point": origin + dir * t, "id": id, "shape": 0}
 			else:
 				var best := Vector4(-1, 0, 0, 0)
-				for b: AABB in Blocks.boxes(id, sh):
+				for b: AABB in (Blocks.fence_boxes(fence_mask(p.x, p.y, p.z)) if id == Blocks.FENCE else Blocks.boxes(id, sh)):
 					var r := _ray_box(origin, dir, AABB(b.position + Vector3(p), b.size))
 					if r.x >= 0.0 and r.x <= max_dist and (best.x < 0.0 or r.x < best.x):
 						best = r

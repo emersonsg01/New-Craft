@@ -14,6 +14,7 @@ global uniform float parallax_depth;
 global uniform float season;
 global uniform float snow_cover;
 uniform float grass_layer = 0.0;
+uniform float snow_layer = -1.0;
 uniform float sand_layer = 3.0;
 uniform float sand_layer2 = -1.0;
 
@@ -118,9 +119,18 @@ void fragment() {
 	if (abs(layer - grass_layer) < 0.5) {
 		alb.rgb *= season_tint(season);
 	}
-	// Neve do inverno sobre superficies voltadas para cima e expostas ao ceu.
-	if (snow_cover > 0.01 && !local_space && abs(layer - sand_layer) > 0.5 && abs(layer - sand_layer2) > 0.5) {
-		float snow = smoothstep(0.5, 0.8, N.y) * smoothstep(0.45, 0.75, sky) * snow_cover;
+	// Biomas nevados seguem as mesmas estacoes do resto do mapa: fora do inverno a neve derrete e
+	// aparece a grama (com a cor da estacao), restando so manchas nas partes altas do relevo.
+	if (!local_space && abs(layer - snow_layer) < 0.5 && snow_layer >= 0.0) {
+		float patch = smoothstep(0.78, 0.98, nh.a * 0.45 + macro2 * 0.65);
+		float amt = clamp(snow_cover + patch * 0.6, 0.0, 1.0);
+		vec3 grass = textureGrad(tex_albedo, vec3(uv, grass_layer), dx, dy).rgb * season_tint(season) * mix(0.80, 1.14, macro);
+		alb.rgb = mix(grass, alb.rgb, amt);
+	}
+	// Neve do inverno sobre superficies voltadas para cima e expostas ao ceu (em todos os biomas).
+	if (snow_cover > 0.01 && !local_space) {
+		float sandy = (abs(layer - sand_layer) < 0.5 || abs(layer - sand_layer2) < 0.5) ? 0.7 : 1.0;
+		float snow = smoothstep(0.5, 0.8, N.y) * smoothstep(0.45, 0.75, sky) * snow_cover * sandy;
 		snow *= smoothstep(0.25, 0.6, nh.a + (macro2 - 0.5) * 0.6 + snow_cover * 0.5);
 		alb.rgb = mix(alb.rgb, vec3(0.90, 0.93, 0.98), snow);
 		rough = mix(rough, 0.55, snow);

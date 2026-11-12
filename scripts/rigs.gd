@@ -236,6 +236,10 @@ static func humanoid(o: Dictionary) -> Dictionary:
 		elif am == 4:
 			hfe.append([5, 4, 1, 2, 2, Color(0.8, 1.0, 1.0)])
 		parts.append({"size": Vector3i(10, 9, 9), "pos": head_pos, "pivot": head_piv, "col": c, "infl": 0.12, "g": "head", "feats": hfe})
+		if o.get("lamp", false):
+			# Capacete de minerador: lanterna na testa.
+			parts.append({"size": Vector3i(4, 3, 2), "pos": head_pos + Vector3(3, 6, -1.6), "pivot": head_piv, "col": Color(0.25, 0.25, 0.27), "g": "head",
+				"feats": [[5, 1, 0, 2, 2, Color(1.0, 0.96, 0.70)]]})
 		if am >= 3:
 			# Crista no elmo.
 			parts.append({"size": Vector3i(2, 3, 9), "pos": head_pos + Vector3(4, 9.6, 0), "pivot": head_piv, "col": tr, "g": "head", "spk": 0.2,
@@ -269,6 +273,17 @@ static func humanoid(o: Dictionary) -> Dictionary:
 				cfe.append([5, cx, 3, 2, 2, Color(0.80, 1.0, 1.0)])
 				cfe.append([5, 1, 1, 1, 1, Color(0.80, 1.0, 1.0)])
 				cfe.append([5, tw - 2, 1, 1, 1, Color(0.80, 1.0, 1.0)])
+		if am == 5 or am == 8:
+			# Cota de malha: aneis alternados; couro tachado: tachas espalhadas.
+			for y in range(0, 8, 2):
+				for x in range(0 if am == 5 else 1, tw, 2 if am == 5 else 3):
+					cfe.append([5, x + (y / 2) % 2, y, 1, 1, tr])
+					cfe.append([4, x + (y / 2) % 2, y, 1, 1, tr])
+		elif am == 9:
+			cfe.append([5, 1, 2, 1, 6, tr])
+			cfe.append([5, tw - 2, 2, 1, 6, tr])
+		elif am == 10:
+			cfe.append([5, cx, 3, 2, 2, Color(1.0, 0.35, 0.55)])
 		parts.append({"size": Vector3i(tw, 10, 5), "pos": torso_pos, "pivot": Vector3(0, 11, 0), "col": c, "infl": 0.12, "feats": cfe})
 		# Ombreiras.
 		for sd in [1, -1]:
@@ -298,6 +313,8 @@ static func humanoid(o: Dictionary) -> Dictionary:
 		var inf := 0.10 if slot == 2 else 0.17
 		parts.append({"size": Vector3i(lw, 11, ld), "pos": Vector3(lxa, 0, -ld * 0.5), "pivot": Vector3(2, 11, 0), "col": CLEAR, "infl": inf, "feats": ff, "g": "legA"})
 		parts.append({"size": Vector3i(lw, 11, ld), "pos": Vector3(lxb, 0, -ld * 0.5), "pivot": Vector3(-2, 11, 0), "col": CLEAR, "infl": inf, "feats": ff, "g": "legB"})
+	parts = _split_limbs(parts, ["armA", "armB"], 0.5)
+	parts = _split_limbs(parts, ["legA", "legB"], 0.55)
 	return {"scale": o.get("scale", 0.95), "anim": o.get("anim", "biped"), "pose": o.get("pose", ""), "alpha": o.get("alpha", false), "parts": parts}
 
 
@@ -305,8 +322,9 @@ static func humanoid(o: Dictionary) -> Dictionary:
 static func _armor_mat(c: Color) -> int:
 	var best := 0
 	var bd := 99.0
-	for i in Items.ARMOR_MATS.size():
-		var m: Color = Items.ARMOR_MATS[i][2]
+	var all: Array = Items.ARMOR_MATS + Items.ARMOR_MATS2
+	for i in all.size():
+		var m: Color = all[i][2]
 		var dd := absf(m.r - c.r) + absf(m.g - c.g) + absf(m.b - c.b)
 		if dd < bd:
 			bd = dd
@@ -321,7 +339,71 @@ static func _armor_trim(am: int, c: Color) -> Color:
 		2: return Color(0.32, 0.33, 0.36)  # rebites
 		3: return Color(1.0, 0.95, 0.70)  # gravura
 		4: return Color(0.90, 0.92, 0.98)  # prata
+		5: return Color(0.28, 0.29, 0.32)  # aneis da malha
+		6: return Color(0.96, 0.30, 0.20)  # aco com friso vermelho
+		7: return Color(0.30, 0.62, 0.52)  # bronze com patina
+		8: return Color(0.80, 0.80, 0.84)  # tachas
+		9: return Color(0.70, 0.45, 1.0)  # obsidiana com brilho violeta
+		10: return Color(0.98, 0.82, 0.30)  # ouro no cristal rubi
 	return c.lightened(0.3)
+
+
+## Divide as partes dos grupos dados em segmento de cima (grupo original) e de baixo (grupo + "2"),
+## pendurado no de cima pela articulacao. frac = fracao da altura que fica no segmento de cima.
+static func _split_limbs(parts: Array, groups: Array, frac: float) -> Array:
+	var out: Array = []
+	var remap: Array[int] = []
+	for p0: Dictionary in parts:
+		var p := p0
+		if p.has("parent_i"):
+			p = p0.duplicate()
+			p["parent_i"] = remap[int(p0["parent_i"])]
+		remap.append(out.size())
+		var g: String = p.get("g", "")
+		var size: Vector3i = p["size"]
+		if not groups.has(g) or size.y < 6 or p.has("parent_i"):
+			out.append(p)
+			continue
+		var h := size.y
+		var u := clampi(int(round(h * frac)), 2, h - 2)
+		var pos: Vector3 = p["pos"]
+		var pivot: Vector3 = p.get("pivot", pos + Vector3(size) * 0.5)
+		var top_f: Array = []
+		var low_f: Array = []
+		for f: Array in p.get("feats", []):
+			var face: int = f[0]
+			if face == 2:
+				top_f.append(f)
+				continue
+			if face == 3:
+				low_f.append(f)
+				continue
+			var y0: int = f[2]
+			var y1: int = y0 + int(f[4])
+			if y0 < u:
+				var nf := f.duplicate()
+				nf[4] = mini(y1, u) - y0
+				top_f.append(nf)
+			if y1 > u:
+				var nf2 := f.duplicate()
+				nf2[2] = maxi(y0, u) - u
+				nf2[4] = y1 - maxi(y0, u)
+				low_f.append(nf2)
+		var up := p.duplicate()
+		up["size"] = Vector3i(size.x, u, size.z)
+		up["pos"] = Vector3(pos.x, pos.y + h - u, pos.z)
+		up["pivot"] = pivot
+		up["feats"] = top_f
+		out.append(up)
+		var lo := p.duplicate()
+		lo["size"] = Vector3i(size.x, h - u, size.z)
+		lo["pos"] = pos
+		lo["pivot"] = Vector3(pivot.x, pos.y + h - u, pivot.z)
+		lo["feats"] = low_f
+		lo["g"] = g + "2"
+		lo["parent_i"] = out.size() - 1
+		out.append(lo)
+	return out
 
 
 static func _spots(count: int, col: Color, w: int, h: int, l: int, seed_v: int) -> Array:
@@ -390,7 +472,9 @@ static func quad(o: Dictionary) -> Dictionary:
 			e["pivot"] = hpiv
 			e["g"] = "head"
 		parts.append(e)
-	return {"scale": o.get("scale", 1.0), "anim": o.get("anim", "quad"), "parts": parts}
+	parts = _split_limbs(parts, ["legA", "legB"], 0.5)
+	return {"scale": o.get("scale", 1.0), "anim": o.get("anim", "quad"), "parts": parts,
+		"back": Vector3(0, lh + bh, 0), "bw": bw, "bl": bl, "lh": lh}
 
 
 ## Variantes de cor por especie: [nome, cor alvo] (a primeira e a cor natural).
@@ -408,7 +492,19 @@ static var VARIANTS := {
 	"andarilho": [["comum", null], ["afogado", Color(0.30, 0.55, 0.62)], ["ressecado", Color(0.62, 0.52, 0.34)]],
 	"golem": [["de pedra", null], ["de musgo", Color(0.30, 0.46, 0.22)], ["de basalto", Color(0.16, 0.16, 0.18)]],
 	"espectro": [["pálido", null], ["violeta", Color(0.66, 0.52, 0.92)]],
+	"cavalo": [["castanho", null], ["preto", null], ["branco", null], ["tordilho", null], ["malhado", null], ["palomino", null], ["baio", null]],
+	"burro": [["cinza", null], ["pardo", null], ["escuro", null]],
+	"camelo": [["dromedário", null], ["bactriano", null]],
+	"cabra": [["branca", null], ["preta", null], ["malhada", null], ["montanhesa", null]],
+	"raposa": [["vermelha", null], ["ártica", null], ["prateada", null]],
+	"urso": [["pardo", null], ["negro", null], ["polar", null]],
+	"pato": [["selvagem", null], ["branco", null], ["pardo", null]],
+	"mumia": [["comum", null], ["real", null]],
+	"goblin": [["verde", null], ["das cavernas", null], ["vermelho", null]],
+	"ogro": [["pardo", null], ["cinza", null], ["musgo", null]],
 }
+## Especies com pelagem/raca desenhada por variante (sem tintura).
+const PATTERNED: Array[String] = ["cavalo", "burro", "camelo", "cabra", "raposa", "urso", "pato", "mumia", "goblin", "ogro"]
 
 
 static func _tint(c: Variant, target: Color) -> Variant:
@@ -424,7 +520,32 @@ static func _tint(c: Variant, target: Color) -> Variant:
 	return Color(t.r, t.g, t.b, col.a)
 
 
-static func mob(kind: String, variant: int = 0) -> Dictionary:
+## Usa os modelos do Blockbench (assets/blockbench/<especie>_<variante>.bbmodel) quando existem.
+static var use_bbmodel := true
+
+
+## saddle: {} sem sela, ou {"seat", "trim", "blanket", "style"} (cores e modelo).
+static func mob(kind: String, variant: int = 0, saddle: Dictionary = {}) -> Dictionary:
+	var vars: Array = VARIANTS.get(kind, [])
+	var vname := "%s_%d" % [kind, variant % maxi(1, vars.size())]
+	if use_bbmodel and kind != "aldeao" and kind != "bandido" and BBModel.exists(vname):
+		var mt := BBModel.meta(vname)
+		var bd := {"bbmodel": vname, "scale": float(mt.get("scale", 1.0)), "anim": str(mt.get("anim", "quad")),
+			"pose": str(mt.get("pose", "")), "alpha": bool(mt.get("alpha", false)), "parts": []}
+		if not saddle.is_empty() and int(mt.get("bw", 0)) > 0:
+			var bk: Array = mt.get("back", [0, 0, 0])
+			bd["back"] = Vector3(float(bk[0]), float(bk[1]), float(bk[2]))
+			bd["bw"] = int(mt["bw"])
+			bd["bl"] = int(mt.get("bl", 16))
+			_add_saddle(bd, saddle)
+		return bd
+	var dd := _mob_variant(kind, variant)
+	if not saddle.is_empty() and dd.has("back"):
+		_add_saddle(dd, saddle)
+	return dd
+
+
+static func _mob_variant(kind: String, variant: int) -> Dictionary:
 	match kind:
 		"aldeao", "bandido":
 			return humanoid(npc_options(kind, variant))
@@ -452,8 +573,10 @@ static func mob(kind: String, variant: int = 0) -> Dictionary:
 				{"size": Vector3i(2, 3, 2), "pos": Vector3(-4, 17, 1), "col": Color(0.55, 0.92, 1.0)},
 				{"size": Vector3i(3, 6, 2), "pos": Vector3(5, 9, -1), "col": shell.darkened(0.2), "g": "armA", "pivot": Vector3(6, 15, 0)},
 				{"size": Vector3i(3, 6, 2), "pos": Vector3(-8, 9, -1), "col": shell.darkened(0.2), "g": "armB", "pivot": Vector3(-6, 15, 0)}]}
-	var d := _mob_base(kind)
 	var vars: Array = VARIANTS.get(kind, [])
+	if PATTERNED.has(kind):
+		return _breed(kind, variant % maxi(1, vars.size()))
+	var d := _mob_base(kind)
 	if vars.size() > 1 and variant % vars.size() != 0:
 		var target: Color = vars[variant % vars.size()][1]
 		for part: Dictionary in d["parts"]:
@@ -475,6 +598,10 @@ static func variant_name(kind: String, variant: int) -> String:
 
 
 ## Aparencia sorteada para NPCs. Aldeoes tem profissao; bandidos usam roupas escuras e bandana/capuz.
+const PROFS: Array[String] = ["fazendeiro", "minerador", "caçador", "criador", "guarda", "ferreiro", "armeiro", "ferramenteiro", "lenhador", "comerciante",
+	"construtor", "artesão", "alfaiate", "tecelão"]
+
+
 static func npc_options(kind: String, seed_v: int) -> Dictionary:
 	var r := RandomNumberGenerator.new()
 	r.seed = seed_v
@@ -497,16 +624,69 @@ static func npc_options(kind: String, seed_v: int) -> Dictionary:
 		o["hat_col"] = [Color(0.62, 0.10, 0.08), Color(0.12, 0.12, 0.12)][r.randi() % 2]
 		o["profession"] = "bandido"
 		return o
-	var profs := ["fazendeiro", "ferreiro", "pastor", "bibliotecário", "caçador", "joalheiro"]
-	var prof: String = profs[r.randi() % profs.size()]
+	# A profissao vem da semente (as vilas escolhem a semente conforme a construcao).
+	var prof: String = PROFS[posmod(seed_v, PROFS.size())]
 	o["profession"] = prof
 	var dye := Blocks.DYES
 	o["shirt"] = dye[r.randi() % 12].lerp(Color(0.6, 0.55, 0.45), 0.35)
 	o["pants"] = [Color(0.30, 0.24, 0.18), Color(0.22, 0.24, 0.36), Color(0.36, 0.34, 0.30)][r.randi() % 3]
+	var iron := Color(0.90, 0.91, 0.93)
 	match prof:
 		"fazendeiro":
 			o["outfit"] = 1
 			o["hat"] = 1 if r.randf() < 0.7 else 0
+		"minerador":
+			o["outfit"] = 2
+			o["cloth2"] = Color(0.36, 0.34, 0.32)
+			o["shirt"] = Color(0.42, 0.36, 0.26)
+			o["hat"] = 3
+			o["hat_col"] = Color(0.85, 0.66, 0.18)
+			o["lamp"] = true
+		"construtor":
+			o["outfit"] = 2
+			o["cloth2"] = Color(0.50, 0.34, 0.16)
+			o["shirt"] = Color(0.70, 0.42, 0.14)
+			o["hat"] = 3
+			o["hat_col"] = Color(0.95, 0.78, 0.10)
+		"artesão":
+			o["outfit"] = 2
+			o["cloth2"] = Color(0.22, 0.42, 0.20)
+		"alfaiate":
+			o["outfit"] = 3
+			o["shirt"] = Color(0.42, 0.18, 0.52)
+			o["cloth2"] = Color(0.80, 0.70, 0.30)
+		"tecelão":
+			o["outfit"] = 1
+			o["hat"] = 4
+			o["hat_col"] = [Color(0.20, 0.45, 0.65), Color(0.70, 0.20, 0.35)][r.randi() % 2]
+		"criador":
+			o["outfit"] = 4
+			o["cloth2"] = Color(0.92, 0.90, 0.84)
+			o["hat"] = 1 if r.randf() < 0.6 else 0
+		"guarda":
+			o["shirt"] = Color(0.16, 0.24, 0.52)
+			o["pants"] = Color(0.18, 0.18, 0.22)
+			o["armor"] = [iron, iron, null, iron]
+		"armeiro":
+			o["outfit"] = 3
+			o["shirt"] = Color(0.46, 0.12, 0.10)
+			o["armor"] = [null, Color(0.66, 0.68, 0.72), null, null]
+		"ferramenteiro":
+			o["outfit"] = 2
+			o["cloth2"] = Color(0.44, 0.28, 0.14)
+			o["hat"] = 4
+			o["hat_col"] = Color(0.20, 0.30, 0.55)
+		"lenhador":
+			o["outfit"] = 4
+			o["shirt"] = [Color(0.62, 0.12, 0.10), Color(0.20, 0.36, 0.20)][r.randi() % 2]
+			o["cloth2"] = Color(0.36, 0.24, 0.12)
+			o["hat"] = 3
+			o["hat_col"] = Color(0.55, 0.10, 0.08)
+		"comerciante":
+			o["outfit"] = 3
+			o["shirt"] = [Color(0.40, 0.18, 0.46), Color(0.10, 0.30, 0.40), Color(0.55, 0.40, 0.08)][r.randi() % 3]
+			o["hat"] = 1
+			o["hat_col"] = Color(0.40, 0.10, 0.30)
 		"ferreiro":
 			o["outfit"] = 2
 			o["cloth2"] = Color(0.22, 0.18, 0.15)
@@ -544,6 +724,249 @@ static func boat(c0: Color, c1: Color) -> Dictionary:
 		{"size": Vector3i(1, 1, 14), "pos": Vector3(8, 5, -7), "col": c0.darkened(0.3), "g": "armA", "pivot": Vector3(8, 5, 0)},
 	]
 	return {"scale": 1.0, "anim": "none", "parts": parts}
+
+
+# ---------------------------------------------------------------- racas novas
+
+static func _breed(kind: String, v: int) -> Dictionary:
+	var black := Color(0.06, 0.06, 0.07)
+	var white := Color(0.94, 0.94, 0.92)
+	match kind:
+		"cavalo":
+			var bases := [Color(0.45, 0.27, 0.14), Color(0.13, 0.11, 0.10), Color(0.90, 0.88, 0.84), Color(0.62, 0.62, 0.64),
+				Color(0.92, 0.90, 0.86), Color(0.86, 0.66, 0.36), Color(0.64, 0.46, 0.25)]
+			var manes := [Color(0.16, 0.10, 0.07), Color(0.06, 0.05, 0.05), Color(0.70, 0.70, 0.72), Color(0.25, 0.25, 0.27),
+				Color(0.30, 0.20, 0.12), Color(0.96, 0.92, 0.80), Color(0.08, 0.07, 0.06)]
+			var c: Color = bases[v]
+			var mane: Color = manes[v]
+			var bf: Array = []
+			if v == 3:
+				bf = _spots(16, c.darkened(0.35), 8, 9, 20, 61)
+			elif v == 4:
+				bf = _spots(7, Color(0.42, 0.26, 0.14), 8, 9, 20, 62)
+				for f: Array in bf:
+					f[3] = f[3] + 2
+					f[4] = f[4] + 2
+			var socks := mane if v == 6 else c.darkened(0.1)
+			var hf: Array = [[5, 1, 5, 3, 1, c.darkened(0.3)], [5, 0, 4, 5, 2, c.darkened(0.15)]]
+			if v == 0 or v == 4:
+				hf.append([5, 2, 0, 1, 4, white])
+			var ex: Array = [
+				# Pescoco inclinado entre o peito e a cabeca, com crina.
+				{"size": Vector3i(5, 10, 5), "pos": Vector3(-2.5, 20, -13), "col": c, "g": "head", "pivot": Vector3(0, 31.7, -9)},
+				{"size": Vector3i(1, 11, 3), "pos": Vector3(-0.5, 22, -9.5), "col": mane, "g": "head", "pivot": Vector3(0, 31.7, -9), "spk": 0.25},
+				{"on_head": true, "size": Vector3i(1, 2, 2), "pos": Vector3(2, 6, 6), "col": mane},
+				{"on_head": true, "size": Vector3i(1, 3, 1), "pos": Vector3(0, 6, 7), "col": c.darkened(0.1), "g": "earA"},
+				{"on_head": true, "size": Vector3i(1, 3, 1), "pos": Vector3(4, 6, 7), "col": c.darkened(0.1), "g": "earB"},
+				# Rabo em dois segmentos.
+				{"size": Vector3i(2, 3, 2), "pos": Vector3(-1, 19, 9.5), "col": mane, "g": "tailz", "pivot": Vector3(0, 22, 10), "spk": 0.25},
+				{"size": Vector3i(3, 9, 2), "pos": Vector3(-1.5, 10, 10), "col": mane, "g": "tailz2", "pivot": Vector3(0, 19, 10.5), "spk": 0.3, "parent_tail": true},
+			]
+			return _with_tail(quad({"bw": 8, "bh": 9, "bl": 20, "lw": 3, "lh": 14, "head": Vector3i(5, 6, 9), "col": c, "col2": c, "head_up": 9.0,
+				"hoof": Color(0.20, 0.17, 0.14), "eye_y": 2, "spk": 0.08, "body_feats": bf, "head_feats": hf,
+				"leg_feats": [[0, 0, 9, 3, 3, socks], [1, 0, 9, 3, 3, socks], [4, 0, 9, 3, 3, socks], [5, 0, 9, 3, 3, socks]], "extra": ex}))
+		"burro":
+			var cs := [Color(0.52, 0.50, 0.48), Color(0.48, 0.36, 0.24), Color(0.24, 0.20, 0.18)]
+			var c: Color = cs[v]
+			var light := c.lightened(0.45)
+			var ex: Array = [
+				{"size": Vector3i(4, 8, 4), "pos": Vector3(-2, 16, -10.5), "col": c, "g": "head", "pivot": Vector3(0, 24.7, -7)},
+				{"size": Vector3i(1, 8, 2), "pos": Vector3(-0.5, 17, -7.5), "col": c.darkened(0.4), "g": "head", "pivot": Vector3(0, 24.7, -7)},
+				{"on_head": true, "size": Vector3i(1, 6, 1), "pos": Vector3(0, 6, 6), "col": c, "feats": [[5, 0, 1, 1, 4, light]], "g": "earA"},
+				{"on_head": true, "size": Vector3i(1, 6, 1), "pos": Vector3(4, 6, 6), "col": c, "feats": [[5, 0, 1, 1, 4, light]], "g": "earB"},
+				{"size": Vector3i(1, 7, 1), "pos": Vector3(-0.5, 9, 8.5), "col": c, "g": "tailz", "pivot": Vector3(0, 16, 8.5)},
+				{"size": Vector3i(2, 2, 2), "pos": Vector3(-1, 8, 8), "col": c.darkened(0.4), "g": "tailz", "pivot": Vector3(0, 16, 8.5)},
+			]
+			return quad({"bw": 7, "bh": 8, "bl": 16, "lw": 3, "lh": 11, "head": Vector3i(5, 6, 8), "col": c, "col2": c, "head_up": 6.0,
+				"hoof": Color(0.16, 0.14, 0.12), "eye_y": 2, "body_feats": [[3, 0, 0, 7, 16, light]], "head_feats": [[5, 0, 3, 5, 3, light], [5, 1, 4, 1, 1, black], [5, 3, 4, 1, 1, black]], "extra": ex})
+		"camelo":
+			var c := Color(0.78, 0.62, 0.40) if v == 0 else Color(0.52, 0.38, 0.24)
+			var ex: Array = [
+				{"size": Vector3i(4, 13, 4), "pos": Vector3(-2, 22, -12), "col": c, "g": "head", "pivot": Vector3(0, 36.7, -8)},
+				{"size": Vector3i(6, 5, 6), "pos": Vector3(-3, 27, -3 if v == 0 else -6), "col": c, "spk": 0.15},
+				{"size": Vector3i(1, 6, 1), "pos": Vector3(-0.5, 18, 8.5), "col": c.darkened(0.2), "g": "tailz", "pivot": Vector3(0, 24, 8.5)},
+			]
+			if v == 1:
+				ex.append({"size": Vector3i(6, 5, 6), "pos": Vector3(-3, 27, 2), "col": c, "spk": 0.15})
+				ex.append({"size": Vector3i(5, 4, 5), "pos": Vector3(-2.5, 24, -13), "col": c.darkened(0.15), "g": "head", "pivot": Vector3(0, 36.7, -8), "spk": 0.3})
+			var dd := quad({"bw": 9, "bh": 9, "bl": 18, "lw": 3, "lh": 18, "head": Vector3i(5, 5, 8), "col": c, "col2": c, "head_up": 12.0,
+				"hoof": c.darkened(0.4), "eye_y": 1, "head_feats": [[5, 1, 3, 3, 1, c.darkened(0.4)]], "extra": ex, "scale": 0.95})
+			dd["back"] = Vector3(0, 32, 0)
+			return dd
+		"cabra":
+			var cs := [Color(0.92, 0.90, 0.86), Color(0.16, 0.14, 0.13), Color(0.90, 0.86, 0.80), Color(0.52, 0.44, 0.34)]
+			var c: Color = cs[v]
+			var horn := Color(0.62, 0.56, 0.46)
+			var bf: Array = _spots(8, Color(0.40, 0.26, 0.14), 6, 6, 11, 71) if v == 2 else []
+			return quad({"bw": 6, "bh": 6, "bl": 11, "lw": 2, "lh": 8, "head": Vector3i(5, 5, 6), "col": c, "head_up": 3.0, "hoof": Color(0.14, 0.12, 0.10),
+				"sclera": Color(0.85, 0.70, 0.30), "eye": black, "eye_y": 2, "body_feats": bf, "spk": 0.18,
+				"extra": [{"on_head": true, "size": Vector3i(1, 3, 2), "pos": Vector3(0.5, 5, 3), "col": horn},
+					{"on_head": true, "size": Vector3i(1, 2, 2), "pos": Vector3(0.5, 7, 5), "col": horn},
+					{"on_head": true, "size": Vector3i(1, 3, 2), "pos": Vector3(3.5, 5, 3), "col": horn},
+					{"on_head": true, "size": Vector3i(1, 2, 2), "pos": Vector3(3.5, 7, 5), "col": horn},
+					{"on_head": true, "size": Vector3i(1, 3, 1), "pos": Vector3(2, -3, 0.5), "col": c.darkened(0.2)},
+					{"on_head": true, "size": Vector3i(2, 1, 1), "pos": Vector3(-2, 3, 4), "col": c, "g": "earA"},
+					{"on_head": true, "size": Vector3i(2, 1, 1), "pos": Vector3(5, 3, 4), "col": c, "g": "earB"},
+					{"size": Vector3i(2, 2, 1), "pos": Vector3(-1, 13, 5.5), "col": c, "g": "tail", "pivot": Vector3(0, 13, 5.5)}]})
+		"raposa":
+			var cs := [Color(0.86, 0.42, 0.12), Color(0.94, 0.94, 0.92), Color(0.32, 0.32, 0.34)]
+			var c: Color = cs[v]
+			var chest := white if v != 1 else Color(0.85, 0.88, 0.92)
+			var sock := Color(0.12, 0.10, 0.09) if v != 1 else Color(0.80, 0.80, 0.82)
+			return quad({"bw": 5, "bh": 5, "bl": 12, "lw": 2, "lh": 5, "head": Vector3i(6, 5, 5), "col": c, "head_up": 1.5, "spk": 0.16,
+				"sclera": Color(0.95, 0.75, 0.20), "eye": black, "eye_y": 2,
+				"body_feats": [[3, 0, 0, 5, 12, chest], [5, 1, 1, 3, 4, chest]], "leg_feats": [[0, 0, 2, 2, 3, sock], [1, 0, 2, 2, 3, sock], [4, 0, 2, 2, 3, sock], [5, 0, 2, 2, 3, sock]],
+				"head_feats": [[5, 0, 3, 6, 2, chest]],
+				"extra": [{"on_head": true, "size": Vector3i(2, 2, 3), "pos": Vector3(2, 0, -2.5), "col": chest, "feats": [[5, 0, 0, 2, 1, black]]},
+					{"on_head": true, "size": Vector3i(2, 3, 1), "pos": Vector3(0, 5, 3), "col": c, "feats": [[5, 0, 0, 2, 1, black]], "g": "earA"},
+					{"on_head": true, "size": Vector3i(2, 3, 1), "pos": Vector3(4, 5, 3), "col": c, "feats": [[5, 0, 0, 2, 1, black]], "g": "earB"},
+					{"size": Vector3i(3, 3, 9), "pos": Vector3(-1.5, 7, 6), "col": c, "spk": 0.25, "g": "tail", "pivot": Vector3(0, 9, 6),
+						"feats": [[4, 0, 0, 3, 3, chest], [2, 0, 6, 3, 3, chest], [3, 0, 6, 3, 3, chest], [0, 6, 0, 3, 3, chest], [1, 0, 0, 3, 3, chest]]}]})
+		"urso":
+			var cs := [Color(0.38, 0.24, 0.14), Color(0.10, 0.09, 0.09), Color(0.94, 0.93, 0.88)]
+			var c: Color = cs[v]
+			var snout := c.lightened(0.25) if v != 2 else c.darkened(0.06)
+			return quad({"bw": 12, "bh": 11, "bl": 18, "lw": 5, "lh": 8, "head": Vector3i(9, 8, 8), "col": c, "head_up": 0.0, "spk": 0.22,
+				"sclera": Color(0.25, 0.15, 0.08), "eye": black, "eye_y": 3, "leg_feats": [[3, 0, 0, 5, 5, c.darkened(0.3)]],
+				"body_feats": _spots(10, c.darkened(0.12), 12, 11, 18, 81),
+				"extra": [{"on_head": true, "size": Vector3i(5, 4, 3), "pos": Vector3(2, 0, -2.5), "col": snout, "feats": [[5, 1, 0, 3, 2, black], [5, 2, 3, 1, 1, c.darkened(0.3)]]},
+					{"on_head": true, "size": Vector3i(3, 3, 2), "pos": Vector3(-1, 7, 4), "col": c, "feats": [[5, 1, 1, 1, 1, c.darkened(0.4)]]},
+					{"on_head": true, "size": Vector3i(3, 3, 2), "pos": Vector3(7, 7, 4), "col": c, "feats": [[5, 1, 1, 1, 1, c.darkened(0.4)]]},
+					{"size": Vector3i(12, 5, 6), "pos": Vector3(-6, 15, -9), "col": c, "spk": 0.3},
+					{"size": Vector3i(3, 3, 2), "pos": Vector3(-1.5, 15, 9), "col": c, "g": "tail"}]})
+		"pato":
+			var head_c: Color = [Color(0.06, 0.40, 0.20), Color(0.96, 0.96, 0.94), Color(0.48, 0.34, 0.20)][v]
+			var body_c: Color = [Color(0.62, 0.58, 0.52), Color(0.96, 0.96, 0.94), Color(0.52, 0.38, 0.24)][v]
+			var breast: Color = [Color(0.48, 0.26, 0.18), Color(0.94, 0.94, 0.92), Color(0.62, 0.48, 0.32)][v]
+			var bill := Color(0.95, 0.68, 0.16) if v != 0 else Color(0.85, 0.75, 0.25)
+			var leg := Color(0.95, 0.55, 0.12)
+			var hp := Vector3(0, 8, -3)
+			var parts: Array = [
+				{"size": Vector3i(5, 4, 8), "pos": Vector3(-2.5, 3, -4), "col": body_c, "spk": 0.1, "feats": [[5, 0, 0, 5, 3, breast], [2, 1, 5, 3, 3, body_c.darkened(0.2)]]},
+				{"size": Vector3i(1, 3, 2), "pos": Vector3(-0.5, 5, 3.5), "col": body_c.darkened(0.3), "g": "tail", "pivot": Vector3(0, 6, 4)},
+				{"size": Vector3i(1, 3, 1), "pos": Vector3(1, 0, -0.5), "pivot": Vector3(1.5, 3, 0), "col": leg, "g": "legA"},
+				{"size": Vector3i(3, 1, 3), "pos": Vector3(0, 0, -2.5), "pivot": Vector3(1.5, 3, 0), "col": leg, "g": "legA"},
+				{"size": Vector3i(1, 3, 1), "pos": Vector3(-2, 0, -0.5), "pivot": Vector3(-1.5, 3, 0), "col": leg, "g": "legB"},
+				{"size": Vector3i(3, 1, 3), "pos": Vector3(-3, 0, -2.5), "pivot": Vector3(-1.5, 3, 0), "col": leg, "g": "legB"},
+				{"size": Vector3i(1, 3, 6), "pos": Vector3(2.5, 4, -2), "pivot": Vector3(2.5, 7, 0), "col": body_c.darkened(0.1), "feats": [[0, 0, 1, 2, 1, Color(0.2, 0.3, 0.8)]], "g": "wingA"},
+				{"size": Vector3i(1, 3, 6), "pos": Vector3(-3.5, 4, -2), "pivot": Vector3(-2.5, 7, 0), "col": body_c.darkened(0.1), "feats": [[1, 0, 1, 2, 1, Color(0.2, 0.3, 0.8)]], "g": "wingB"},
+				{"size": Vector3i(3, 5, 3), "pos": Vector3(-1.5, 6, -5.5), "pivot": hp, "col": head_c, "g": "head",
+					"feats": [[5, 0, 1, 1, 1, black], [5, 2, 1, 1, 1, black], [0, 1, 1, 1, 1, black], [1, 1, 1, 1, 1, black], [5, 0, 4, 3, 1, white if v == 0 else head_c]]},
+				{"size": Vector3i(3, 1, 3), "pos": Vector3(-1.5, 8, -8), "pivot": hp, "col": bill, "g": "head"},
+			]
+			return {"scale": 0.85, "anim": "bird", "parts": parts}
+		"mumia", "goblin", "ogro":
+			return _monster(kind, v)
+	return _mob_base(kind)
+
+
+## Rabo de dois segmentos: o segundo pende do primeiro.
+static func _with_tail(dd: Dictionary) -> Dictionary:
+	var parts: Array = dd["parts"]
+	var t1 := -1
+	for i in parts.size():
+		var p: Dictionary = parts[i]
+		if p.get("g", "") == "tailz" and t1 < 0:
+			t1 = i
+		if p.get("parent_tail", false) and t1 >= 0:
+			p["parent_i"] = t1
+			p.erase("parent_tail")
+	return dd
+
+
+static func _monster(kind: String, v: int) -> Dictionary:
+	var black := Color(0.06, 0.06, 0.07)
+	match kind:
+		"mumia":
+			var band := Color(0.80, 0.74, 0.56) if v == 0 else Color(0.84, 0.78, 0.58)
+			var dark := band.darkened(0.3)
+			var lines: Array = []
+			for k in 5:
+				lines.append([5, 0, 1 + k * 2, 10, 1, dark])
+			var tl: Array = []
+			for k in 5:
+				tl.append([5, 0, k * 2 + (k % 2), 9, 1, dark])
+				tl.append([4, 0, k * 2, 9, 1, dark])
+			var ll: Array = [[5, 0, 2, 4, 1, dark], [5, 0, 5, 4, 1, dark], [5, 0, 8, 4, 1, dark], [0, 0, 3, 4, 1, dark], [1, 0, 6, 4, 1, dark]]
+			var eye := Color(0.4, 1.0, 0.6) if v == 0 else Color(1.0, 0.8, 0.2)
+			var d := humanoid({"plain": true, "skin": band, "shirt": band, "pants": band, "eyes": eye, "mouth": dark, "pose": "reach", "arm_w": 3,
+				"head_feats": lines + [[5, 2, 4, 2, 1, eye], [5, 6, 4, 2, 1, eye], [5, 2, 3, 6, 1, black]], "torso_feats": tl, "limb_feats": ll})
+			if v == 1:
+				var gold := Color(0.95, 0.75, 0.20)
+				var parts: Array = d["parts"]
+				parts.append({"size": Vector3i(10, 3, 1), "pos": Vector3(-5, 20, -3.2), "col": gold, "feats": [[5, 2, 1, 6, 1, Color(0.2, 0.4, 0.9)]]})
+				parts.append({"size": Vector3i(10, 4, 2), "pos": Vector3(-5, 22, -5.2), "pivot": Vector3(0, 21, 0), "col": gold, "g": "head",
+					"feats": [[5, 2, 1, 2, 1, black], [5, 6, 1, 2, 1, black], [5, 4, 3, 2, 1, Color(0.2, 0.4, 0.9)]]})
+			return d
+		"goblin":
+			var skins := [Color(0.36, 0.55, 0.20), Color(0.40, 0.46, 0.52), Color(0.70, 0.24, 0.16)]
+			var sk: Color = skins[v]
+			var cloth := Color(0.36, 0.26, 0.16)
+			var d := humanoid({"plain": true, "skin": sk, "shirt": cloth, "pants": cloth.darkened(0.3), "eyes": Color(1.0, 0.85, 0.1), "mouth": black,
+				"arm_w": 3, "leg_w": 3, "torso_w": 8, "scale": 0.68,
+				"head_feats": [[5, 2, 3, 2, 1, Color(1.0, 0.85, 0.1)], [5, 6, 3, 2, 1, Color(1.0, 0.85, 0.1)], [5, 3, 6, 4, 1, black], [5, 3, 7, 1, 1, Color(0.95, 0.95, 0.85)], [5, 6, 7, 1, 1, Color(0.95, 0.95, 0.85)]],
+				"torso_feats": [[5, 0, 9, 3, 1, Color(0, 0, 0, 0)], [5, 5, 9, 2, 1, Color(0, 0, 0, 0)], [5, 1, 3, 2, 2, cloth.darkened(0.3)]]})
+			var parts: Array = d["parts"]
+			var hp := Vector3(0, 21, 0)
+			parts.append({"size": Vector3i(4, 3, 1), "pos": Vector3(5, 25, -1), "pivot": hp, "col": sk, "g": "head"})
+			parts.append({"size": Vector3i(4, 3, 1), "pos": Vector3(-9, 25, -1), "pivot": hp, "col": sk, "g": "head"})
+			parts.append({"size": Vector3i(2, 3, 2), "pos": Vector3(-1, 23, -6.5), "pivot": hp, "col": sk.darkened(0.1), "g": "head"})
+			return d
+		"ogro":
+			var skins := [Color(0.58, 0.48, 0.30), Color(0.52, 0.52, 0.50), Color(0.40, 0.50, 0.28)]
+			var sk: Color = skins[v]
+			var hide := Color(0.40, 0.28, 0.16)
+			var d := humanoid({"plain": true, "skin": sk, "shirt": sk, "pants": hide, "eyes": Color(0.9, 0.2, 0.1), "mouth": black,
+				"arm_w": 5, "leg_w": 5, "torso_w": 12, "scale": 1.6,
+				"head_feats": [[5, 2, 3, 2, 1, Color(0.9, 0.2, 0.1)], [5, 6, 3, 2, 1, Color(0.9, 0.2, 0.1)], [5, 2, 2, 6, 1, sk.darkened(0.35)], [5, 2, 6, 6, 1, black]],
+				"torso_feats": [[5, 0, 7, 12, 3, hide], [4, 0, 7, 12, 3, hide], [5, 4, 2, 4, 3, sk.darkened(0.15)], [0, 0, 0, 5, 9, Color(0, 0, 0, 0)]]})
+			var parts: Array = d["parts"]
+			var hp := Vector3(0, 21, 0)
+			parts.append({"size": Vector3i(1, 2, 1), "pos": Vector3(-3, 21, -5.2), "pivot": hp, "col": Color(0.95, 0.93, 0.85), "g": "head"})
+			parts.append({"size": Vector3i(1, 2, 1), "pos": Vector3(2, 21, -5.2), "pivot": hp, "col": Color(0.95, 0.93, 0.85), "g": "head"})
+			return d
+	return _mob_base(kind)
+
+
+## Sela sobre o lombo: manta, assento, arcos, estribos e acessorios do modelo.
+static func _add_saddle(dd: Dictionary, sd: Dictionary) -> void:
+	var parts: Array = dd["parts"]
+	var back: Vector3 = dd["back"]
+	var bw: int = dd["bw"]
+	var seat: Color = sd.get("seat", Color(0.36, 0.20, 0.10))
+	var trim: Color = sd.get("trim", Color(0.24, 0.16, 0.10))
+	var blanket: Color = sd.get("blanket", Color(0.60, 0.12, 0.10))
+	var style: String = sd.get("style", "")
+	var y := back.y
+	var bwh := bw * 0.5
+	parts.append({"size": Vector3i(bw + 2, 1, 9), "pos": Vector3(-bwh - 1, y - 0.6, -4.5), "col": blanket, "infl": 0.02,
+		"feats": [[0, 0, 0, 9, 1, trim], [1, 0, 0, 9, 1, trim], [4, 0, 0, bw + 2, 1, trim], [5, 0, 0, bw + 2, 1, trim]]})
+	parts.append({"size": Vector3i(1, 4, 7), "pos": Vector3(-bwh - 1, y - 4, -3.5), "col": blanket, "feats": [[1, 0, 3, 7, 1, trim]]})
+	parts.append({"size": Vector3i(1, 4, 7), "pos": Vector3(bwh, y - 4, -3.5), "col": blanket, "feats": [[0, 0, 3, 7, 1, trim]]})
+	parts.append({"size": Vector3i(bw - 2, 1, 6), "pos": Vector3(-bwh + 1, y + 0.4, -3), "col": seat, "spk": 0.08,
+		"feats": [[2, 1, 1, bw - 4, 4, seat.lightened(0.12)]]})
+	parts.append({"size": Vector3i(bw - 2, 2, 1), "pos": Vector3(-bwh + 1, y + 0.4, 2.2), "col": seat.darkened(0.1), "feats": [[2, 0, 0, bw - 2, 1, trim]]})
+	parts.append({"size": Vector3i(2, 3, 1), "pos": Vector3(-1, y + 0.4, -3.6), "col": seat.darkened(0.1), "feats": [[2, 0, 0, 2, 1, trim]]})
+	for sx in [-1, 1]:
+		var x: float = sx * (bwh + 1.2) - 0.5
+		parts.append({"size": Vector3i(1, 7, 1), "pos": Vector3(x, y - 7, -0.5), "col": seat.darkened(0.3)})
+		parts.append({"size": Vector3i(1, 1, 3), "pos": Vector3(x, y - 8, -1.5), "col": trim, "feats": [[2, 0, 1, 1, 1, Color(0, 0, 0, 0)]]})
+	match style:
+		"viagem":
+			for sx in [-1, 1]:
+				var x: float = sx * (bwh + 1.5) - (1.5 if sx > 0 else 1.5)
+				parts.append({"size": Vector3i(3, 4, 4), "pos": Vector3(x if sx > 0 else x - 0.5, y - 4, 3), "col": seat.lightened(0.05),
+					"feats": [[0, 0, 0, 4, 1, trim], [1, 0, 0, 4, 1, trim], [5, 1, 1, 1, 1, trim]]})
+			parts.append({"size": Vector3i(bw, 2, 2), "pos": Vector3(-bwh, y + 0.5, 3.4), "col": Color(0.62, 0.56, 0.42), "spk": 0.25})
+		"guerra":
+			parts.append({"size": Vector3i(bw + 1, 5, 1), "pos": Vector3(-bwh - 0.5, y - 9, -dd["bl"] * 0.5 - 1.2), "col": trim,
+				"feats": [[5, 1, 1, bw - 1, 1, trim.lightened(0.3)], [5, int(bwh) - 1, 2, 2, 2, blanket]]})
+			for sx in [-1, 1]:
+				parts.append({"size": Vector3i(1, 6, 12), "pos": Vector3(sx * (bwh + 1.4) - 0.5, y - 6, -6), "col": blanket,
+					"feats": [[0 if sx > 0 else 1, 0, 5, 12, 1, trim], [0 if sx > 0 else 1, 5, 1, 2, 3, trim.lightened(0.2)]]})
+		"cerimonial":
+			for k in 4:
+				parts.append({"size": Vector3i(1, 2, 1), "pos": Vector3(-bwh - 1.2 + (bw + 1.4) * (k % 2), y - 6.5, -3 + 5 * (k / 2)), "col": trim})
 
 
 static func _mob_base(kind: String) -> Dictionary:

@@ -14,6 +14,7 @@ var _loading: Control
 var _load_label: Label
 var _load_bar: ProgressBar
 var _ready_to_play := false
+var net: Net
 
 
 func _ready() -> void:
@@ -64,6 +65,7 @@ func _ready() -> void:
 	terrain.set_shader_parameter("macro_noise", macro)
 	terrain.set_shader_parameter("natural_layers", float(Blocks.NATURAL_LAYERS))
 	terrain.set_shader_parameter("grass_layer", float(Blocks.L_GRASS_TOP))
+	terrain.set_shader_parameter("snow_layer", float(Blocks.L_SNOW))
 	terrain.set_shader_parameter("sand_layer", float(Blocks.L_SAND))
 	terrain.set_shader_parameter("sand_layer2", float(Blocks.FACE_LAYER[Blocks.RED_SAND * 6]))
 	var foliage := ShaderMaterial.new()
@@ -92,8 +94,31 @@ func _ready() -> void:
 	glass_i.set_shader_parameter("local_space", true)
 	var mats_item: Array = [terrain_i, foliage_i, water, glass_i, lava]
 
-	# 3) Mundo.
+	# 3) Multijogador: entrar num servidor antes de gerar o mundo (a semente vem dele).
+	net = Net.new()
+	net.name = "Net"
+	net.main = self
+	add_child(net)
+	net.my_name = str(GameSettings.get_v("net_name"))
+	var join_to := str(GameSettings.get_v("net_join"))
+	for a in args:
+		if a.begins_with("--join="):
+			join_to = a.trim_prefix("--join=")
+	var joined := false
 	var save := World.load_save()
+	if join_to != "":
+		GameSettings.set_v("net_join", "")
+		var parts := join_to.split(":")
+		var ip := parts[0]
+		var port := int(parts[1]) if parts.size() > 1 else Net.DEFAULT_PORT
+		_set_loading("Conectando a %s:%d..." % [ip, port], 0.4)
+		joined = await net.join(ip, port, _app_preview())
+		if joined:
+			var w: Dictionary = net.welcome
+			save = {"seed": w["seed"], "all_mods": w["all_mods"], "all_micro": w["all_micro"], "time": w["time"], "day": w["day"]}
+		else:
+			_set_loading("Não foi possível conectar. Abrindo o mundo local...", 0.4)
+			await get_tree().create_timer(1.5).timeout
 	var seed_v: int = save.get("seed", randi() & 0x3FFFFFFF)
 	for a in args:
 		if a.begins_with("--seed="):
@@ -124,7 +149,8 @@ func _ready() -> void:
 	add_child(weather)
 	GameSettings.bind(weather.env, weather.sun, weather.moon)
 
-	# 4) Jogador.
+	# 4) Jogador. O modo e de cada mundo: comeca em sobrevivencia; o criativo so por comando no chat.
+	GameSettings.data["mode"] = str(save.get("mode", "survival"))
 	var spawn := _find_spawn()
 	if save.has("player"):
 		spawn = save["player"]
@@ -143,6 +169,8 @@ func _ready() -> void:
 			player.armor[i] = int(ar[i])
 	if save.has("stats"):
 		player.stats.from_dict(save["stats"])
+	if save.has("offhand"):
+		player.offhand = (save["offhand"] as Array).duplicate()
 	if save.has("inv"):
 		player.inv.from_array(save["inv"])
 		player.food = float(save.get("food", 20.0))
@@ -196,6 +224,15 @@ func _ready() -> void:
 	_ui.move_child(_loading, -1)
 	GameSettings.changed.connect(_apply_view)
 	_apply_view()
+	net.attach(world, player, mobs, weather)
+	menus.net = net
+	if joined:
+		hud.add_toast("Conectado ao servidor (%d jogadores)." % (net.players.size() + 1))
+	for a in args:
+		if a.begins_with("--host"):
+			var hp := int(a.trim_prefix("--host=")) if a.contains("=") else Net.DEFAULT_PORT
+			var herr := net.host(hp)
+			hud.add_toast(herr if herr != "" else "Servidor aberto na porta %d." % hp)
 
 	# 6) Espera o terreno em volta do jogador.
 	while true:
@@ -274,6 +311,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 				menus.open()
 		elif get_tree().paused:
 			return
+		elif key == KEY_T and not hud.palette_open and not menus.visible:
+			_open_chat()
+			get_viewport().set_input_as_handled()
 		elif key == KEY_E:
 			hud.toggle_palette()
 		elif key == KEY_P:
@@ -376,8 +416,85 @@ func _process(_dt: float) -> void:
 		far.focus = player.position
 		far.near_radius = world.near_radius
 	if _ready_to_play and not get_tree().paused:
-		weather.time_scale = 40.0 if Input.is_physical_key_pressed(KEY_T) else 1.0
+		weather.time_scale = 1.0
 		world.season_growth = weather.growth()
+
+
+# ---------------------------------------------------------------- chat e comandos
+var _chat: LineEdit
+
+
+## T abre o chat; Enter envia; Esc fecha. Textos com "/" sao comandos.
+func _open_chat() -> void:
+	if _chat == null:
+		_chat = LineEdit.new()
+		_chat.placeholder_text = "Digite uma mensagem ou um comando (/modo-criativo, /modo_survive)"
+		_chat.anchor_left = 0.0
+		_chat.anchor_right = 0.5
+		_chat.anchor_top = 1.0
+		_chat.anchor_bottom = 1.0
+		_chat.offset_left = 16.0
+		_chat.offset_right = 0.0
+		_chat.offset_top = -215.0
+		_chat.offset_bottom = -179.0
+		_chat.add_theme_font_size_override("font_size", 18)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0, 0, 0, 0.55)
+		sb.content_margin_left = 10.0
+		sb.content_margin_right = 10.0
+		_chat.add_theme_stylebox_override("normal", sb)
+		_chat.add_theme_stylebox_override("focus", sb)
+		_chat.text_submitted.connect(_chat_submit)
+		_chat.gui_input.connect(func(e: InputEvent) -> void:
+			if e is InputEventKey and e.pressed and (e as InputEventKey).physical_keycode == KEY_ESCAPE:
+				_close_chat()
+				_chat.accept_event())
+		_ui.add_child(_chat)
+	_chat.text = ""
+	_chat.visible = true
+	player.active = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# Espera o T soltar para ele nao entrar no texto.
+	await get_tree().process_frame
+	_chat.text = ""
+	_chat.grab_focus()
+
+
+func _close_chat() -> void:
+	if _chat == null:
+		return
+	_chat.release_focus()
+	_chat.visible = false
+	player.active = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _chat_submit(text: String) -> void:
+	_close_chat()
+	text = text.strip_edges()
+	if text == "":
+		return
+	if text.begins_with("/"):
+		hud.add_toast(run_command(text))
+	else:
+		hud.add_toast("%s: %s" % [str(GameSettings.get_v("net_name")), text])
+
+
+## Executa um comando do chat e devolve a resposta.
+func run_command(cmd: String) -> String:
+	match cmd.to_lower():
+		"/modo-criativo":
+			if player.creative():
+				return "Você já está no modo criativo."
+			GameSettings.set_v("mode", "creative")
+			return "Modo criativo ativado: blocos infinitos, voo (F ou espaço duas vezes) e sem dano. Para voltar: /modo_survive"
+		"/modo_survive":
+			if not player.creative():
+				return "Você já está no modo sobrevivência."
+			GameSettings.set_v("mode", "survival")
+			player.flying = false
+			return "Modo sobrevivência ativado."
+	return "Comando desconhecido: %s  (comandos: /modo-criativo, /modo_survive)" % cmd
 
 
 func _screenshot(path: String) -> void:
@@ -385,11 +502,21 @@ func _screenshot(path: String) -> void:
 	get_viewport().get_texture().get_image().save_png(path)
 
 
+## Aparencia do personagem, para os outros jogadores verem.
+func _app_preview() -> Dictionary:
+	var none: Array[int] = [0, 0, 0, 0]
+	return Player.character_options(none)
+
+
 func _save() -> void:
 	if world == null or player == null or not _ready_to_play:
 		return
+	# Conectado a outro servidor: o mundo e dele, nao sobrescreve o mundo local.
+	if net != null and net.role == "client":
+		return
 	world.save({"player": player.position, "yaw": player.yaw, "time": weather.time_of_day, "day": weather.day, "inv": player.inv.to_array(),
-		"food": player.food, "armor": player.armor, "spawn": player.spawn_point, "stats": player.stats.to_dict()})
+		"food": player.food, "armor": player.armor, "spawn": player.spawn_point, "stats": player.stats.to_dict(), "offhand": player.offhand,
+		"mode": str(GameSettings.get_v("mode"))})
 
 
 func _quit() -> void:
@@ -397,6 +524,12 @@ func _quit() -> void:
 	get_tree().paused = false
 	if world != null:
 		world.wait_all()
+	if net != null:
+		net.leave()
+	# "Entrar no servidor": recarrega o jogo, que conecta antes de gerar o mundo.
+	if str(GameSettings.get_v("net_join")) != "":
+		get_tree().reload_current_scene()
+		return
 	get_tree().quit()
 
 

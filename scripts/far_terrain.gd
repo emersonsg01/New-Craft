@@ -82,7 +82,8 @@ void vertex() {
 		top = c_sand;
 		side = c_sand * 0.9;
 	} else if (bio == 5.0) {
-		top = c_snow;
+		// Bioma de neve segue as estacoes: grama fora do inverno.
+		top = mix(c_grass, c_snow, snow_cover);
 	} else if (bio == 6.0) {
 		top = c_stone;
 		side = c_stone * 0.9;
@@ -94,7 +95,7 @@ void vertex() {
 		top = c_sand;
 		side = c_sand * 0.9;
 	}
-	v_snowable = (bio < 1.5 || bio == 4.0 || s0.w < 44.0) ? 0.0 : 1.0;
+	v_snowable = (bio < 1.5 || bio == 4.0 || s0.w < 44.0) ? 0.7 : 1.0;
 	v_green = (bio == 2.0 || bio == 3.0) ? 1.0 : 0.0;
 	vec3 canopy = bio == 5.0 ? c_pine : c_leaves;
 	float cw = smoothstep(0.15, 0.55, s0.z);

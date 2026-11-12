@@ -296,6 +296,9 @@ func finish(blocks: PackedByteArray, cols: PackedInt32Array, cx: int, cz: int, m
 	top = maxi(top, int(st["top"]))
 	if int(st["top"]) > 0:
 		_sills(blocks, micro, top)
+	var ms: Dictionary = st.get("micro_s", {})
+	for k: int in ms:
+		micro[k] = ms[k]
 	# Estruturas podem ter sobrescrito celulas micro.
 	for idx: int in micro.keys():
 		if blocks[idx] != Blocks.MICRO:
@@ -445,7 +448,7 @@ func _apply_mods(blocks: PackedByteArray, shapes: Dictionary, top: int, mods: Di
 			shapes[idx] = mv >> 8
 		top = maxi(top, idx >> 8)
 	return {"blocks": blocks, "shapes": shapes, "top": mini(top + 1, H), "ticks": extra.get("ticks", []),
-		"loot": extra.get("loot", []), "npcs": extra.get("npcs", []), "micro": extra.get("micro", {})}
+		"loot": extra.get("loot", []), "npcs": extra.get("npcs", []), "micro": extra.get("micro", {}), "lights": extra.get("lights", [])}
 
 
 ## Ilhas etereas: arvores de cristal sobre o musgo lunar.
