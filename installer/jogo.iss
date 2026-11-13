@@ -48,4 +48,4 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\NewCraft.exe"; WorkingDir: "{
 Filename: "{app}\NewCraft.exe"; Description: "Jogar {#AppName} agora"; Flags: nowait postinstall skipifsilent
 
 [Messages]
-ptbr.FinishedLabel=O {#AppName} foi instalado.%n%nSe o jogo travar ao abrir, use o atalho "{#AppName} (modo de compatibilidade)" no menu Iniciar.%n%nOs mundos salvos ficam em %%APPDATA%%\Godot\app_userdata\New Craft e não são apagados ao desinstalar.
+ptbr.FinishedLabel=O {#AppName} foi instalado.%n%nSe o jogo travar ao abrir, use o atalho "{#AppName} (modo de compatibilidade)" no menu Iniciar.%n%nOs mundos salvos ficam em %%APPDATA%%\Godot\app_userdata\New Craft\mundos e não são apagados ao desinstalar.

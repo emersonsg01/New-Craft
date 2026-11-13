@@ -25,9 +25,36 @@ func _ready() -> void:
 	_build_loading()
 	await get_tree().process_frame
 
-	# 1) Texturas PBR procedurais, geradas em paralelo.
+	# 1) Texturas PBR procedurais, geradas em paralelo (enquanto o jogador escolhe na tela inicial).
 	var tg := TextureGen.new()
 	tg.start()
+	var join_to := str(GameSettings.get_v("net_join"))
+	for a in args:
+		if a.begins_with("--join="):
+			join_to = a.trim_prefix("--join=")
+	# Tela inicial (pulada ao entrar num servidor pelo menu do jogo, por argumentos ou nos testes automaticos).
+	var direct: bool = join_to != "" or "--script" in OS.get_cmdline_args()
+	for a in args:
+		if a.begins_with("--host") or a.begins_with("--seed"):
+			direct = true
+	if "--menu" in args:
+		direct = false
+	if not direct:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		var title := TitleMenu.new()
+		_ui.add_child(title)
+		var choice: Dictionary = await title.chosen
+		title.queue_free()
+		if choice["mode"] == "join":
+			join_to = str(choice["address"])
+		else:
+			Saves.current = choice["world"]
+	if join_to == "" and Saves.current.is_empty():
+		# Sem escolha (testes/argumentos): o mundo jogado por ultimo, ou um novo.
+		var ws := Saves.list_worlds(Saves.DIR_SOLO)
+		Saves.current = ws[0] if not ws.is_empty() else Saves.new_world("Meu mundo", "", Saves.DIR_SOLO)
+	if not Saves.current.is_empty():
+		World.save_path = str(Saves.current["path"])
 	while not tg.is_done():
 		_set_loading("Gerando texturas PBR...", tg.progress() * 0.4)
 		await get_tree().process_frame
@@ -100,12 +127,8 @@ func _ready() -> void:
 	net.main = self
 	add_child(net)
 	net.my_name = str(GameSettings.get_v("net_name"))
-	var join_to := str(GameSettings.get_v("net_join"))
-	for a in args:
-		if a.begins_with("--join="):
-			join_to = a.trim_prefix("--join=")
 	var joined := false
-	var save := World.load_save()
+	var save := World.load_save() if join_to == "" else {}
 	if join_to != "":
 		GameSettings.set_v("net_join", "")
 		var parts := join_to.split(":")
@@ -117,9 +140,12 @@ func _ready() -> void:
 			var w: Dictionary = net.welcome
 			save = {"seed": w["seed"], "all_mods": w["all_mods"], "all_micro": w["all_micro"], "time": w["time"], "day": w["day"]}
 		else:
-			_set_loading("Não foi possível conectar. Abrindo o mundo local...", 0.4)
-			await get_tree().create_timer(1.5).timeout
-	var seed_v: int = save.get("seed", randi() & 0x3FFFFFFF)
+			# Volta para a tela inicial com o aviso.
+			Saves.title_message = "Não foi possível conectar a %s:%d. Confira o endereço e se o servidor está ligado." % [ip, port]
+			Saves.current = {}
+			get_tree().reload_current_scene()
+			return
+	var seed_v: int = save.get("seed", int(Saves.current.get("seed", randi() & 0x3FFFFFFF)) if not joined else randi())
 	for a in args:
 		if a.begins_with("--seed="):
 			seed_v = int(a.trim_prefix("--seed="))
@@ -517,6 +543,8 @@ func _save() -> void:
 	world.save({"player": player.position, "yaw": player.yaw, "time": weather.time_of_day, "day": weather.day, "inv": player.inv.to_array(),
 		"food": player.food, "armor": player.armor, "spawn": player.spawn_point, "stats": player.stats.to_dict(), "offhand": player.offhand,
 		"mode": str(GameSettings.get_v("mode"))})
+	if not Saves.current.is_empty():
+		Saves.touch(Saves.DIR_SOLO, str(Saves.current["id"]), {"day": weather.day, "mode": str(GameSettings.get_v("mode"))})
 
 
 func _quit() -> void:
@@ -526,11 +554,9 @@ func _quit() -> void:
 		world.wait_all()
 	if net != null:
 		net.leave()
-	# "Entrar no servidor": recarrega o jogo, que conecta antes de gerar o mundo.
-	if str(GameSettings.get_v("net_join")) != "":
-		get_tree().reload_current_scene()
-		return
-	get_tree().quit()
+	# Volta para a tela inicial ("Entrar no servidor" pelo menu do jogo conecta direto ao recarregar).
+	Saves.current = {}
+	get_tree().reload_current_scene()
 
 
 func _notification(what: int) -> void:

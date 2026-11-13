@@ -13,7 +13,7 @@ config_version=5
 config/name="New Craft"
 config/description="Mundo aberto procedural em voxels com texturas PBR geradas por codigo."
 run/main_scene="res://scenes/main.tscn"
-run/main_scene.dedicated_server="res://scenes/server.tscn"
+run/main_scene.servidor="res://scenes/server.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [autoload]

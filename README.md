@@ -170,6 +170,13 @@ Veja [docs/ARQUITETURA.md](docs/ARQUITETURA.md) para o funcionamento interno: ge
 
 Projeto pessoal. Todos os recursos visuais são gerados proceduralmente pelo próprio código.
 
+## Menus
+
+- **Tela inicial:** *Jogar sozinho* lista os mundos salvos (nome, semente, dia, última vez jogado), com *Jogar*, *Gerar novo mundo* (nome e semente opcional; uma palavra também vira semente) e *Excluir* (pede confirmação). *Multijogador* tem o seu nome, os *servidores favoritos* (entrar, remover) e *Entrar em novo servidor* (endereço IP:porta, com opção de salvar nos favoritos). Se a conexão falhar, o jogo volta para a tela inicial com o aviso. O mundo antigo (de antes da lista) aparece como "Meu mundo".
+- **No jogo:** Esc → *Salvar e voltar ao menu*.
+- **Painel do servidor** (`NewCraftServer.exe`): lista os mundos do servidor, *Criar mundo* (nome e semente), porta, *Ligar mundo* e *Desligar mundo* (salva e desconecta todos), jogadores conectados, endereços para a rede local e registro. Sem janela: `NewCraftServer.console.exe --headless --port=7777 [--mundo=id]` (ou `Servidor.bat`).
+- Mundos do jogo ficam em `user://mundos/` e os do servidor em `user://servidor_mundos/` (cada um com `.save` + `.json` de informações); favoritos em `user://servidores.json`.
+
 ## Executáveis (.exe)
 
 Os perfis de exportação ficam em `export_presets.cfg` (precisa dos modelos de exportação da Godot 4.7.2 instalados). Para gerar de novo:
@@ -182,7 +189,7 @@ godot --headless --path . --export-release "Servidor dedicado (Windows)" build/N
 Na pasta `build/`:
 
 - `NewCraft.exe` — o jogo (arquivo único, com tudo embutido). `Jogar.bat` abre o jogo desligando camadas Vulkan de outros programas (ReShade, overlays) que podem travar a abertura.
-- `NewCraftServer.exe` + `NewCraftServer.console.exe` — servidor dedicado, sem janela gráfica: abre direto na cena `scenes/server.tscn`. Use o `.console.exe` (ou `Servidor.bat [porta] [semente]`) para ver o registro e fechar com Ctrl+C. Opções: `--port=7777 --seed=123 --save=user://servidor.save`.
+- `NewCraftServer.exe` + `NewCraftServer.console.exe` — servidor: o `.exe` abre o painel (cena `scenes/server.tscn`, ativada pela característica de exportação `servidor`); o `.console.exe --headless` (ou `Servidor.bat [porta] [id-do-mundo]`) roda sem janela. Opções: `--port=7777 --mundo=id --seed=123 --save=user://arquivo.save`.
 - Os dois arquivos do servidor precisam ficar juntos na mesma pasta.
 
 ### Instaladores

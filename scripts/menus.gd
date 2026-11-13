@@ -68,7 +68,7 @@ func _build_pause() -> void:
 	v.add_child(title)
 	v.add_child(_button("Continuar", func() -> void: close()))
 	v.add_child(_button("Opções", func() -> void: _show_options()))
-	v.add_child(_button("Salvar e sair", func() -> void: quit_requested.emit()))
+	v.add_child(_button("Salvar e voltar ao menu", func() -> void: quit_requested.emit()))
 
 
 func open() -> void:

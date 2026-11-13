@@ -4,6 +4,8 @@ extends Node3D
 
 const H := ChunkMesher.H
 const SAVE_PATH := "user://world_v4.save"
+## Arquivo do mundo aberto (cada mundo da lista tem o seu; ver Saves).
+static var save_path := SAVE_PATH
 const DIM_NAMES: Array[String] = ["Superfície", "Profundezas Ígneas", "Ilhas Etéreas"]
 
 class Chunk:
@@ -1221,9 +1223,9 @@ func raycast(origin: Vector3, dir: Vector3, max_dist: float) -> Dictionary:
 # ---------------------------------------------------------------- salvar / carregar
 
 static func load_save() -> Dictionary:
-	if not FileAccess.file_exists(SAVE_PATH):
+	if not FileAccess.file_exists(save_path):
 		return {}
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var f := FileAccess.open(save_path, FileAccess.READ)
 	if f == null:
 		return {}
 	var v: Variant = f.get_var()
@@ -1249,6 +1251,6 @@ func save(extra: Dictionary) -> void:
 		var f: Dictionary = furnaces[k]
 		fur[k] = {"inv": (f["inv"] as Inventory).to_array(), "burn": f["burn"], "burn_max": f["burn_max"], "cook": f["cook"]}
 	d["furnaces"] = fur
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var f := FileAccess.open(save_path, FileAccess.WRITE)
 	if f != null:
 		f.store_var(d)
