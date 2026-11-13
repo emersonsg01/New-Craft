@@ -90,7 +90,7 @@ static func _face_of(n: Vector3) -> int:
 
 
 static func _box(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArray, idx: PackedInt32Array,
-		o: Vector3, bx: AABB, id: int, light: float, emit: float, pb: PackedInt32Array, i: int) -> void:
+		o: Vector3, bx: AABB, id: int, light: float, emit: float, pb: PackedInt32Array, i: int, lay: int = -1) -> void:
 	var mn := bx.position
 	var sz := bx.size
 	var mx := bx.end
@@ -107,7 +107,7 @@ static func _box(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorArr
 		if onb and Blocks.OPQ[pb[i + ND[f]]] == 1:
 			continue
 		var b := f * 4
-		var col := Color(0.96, fl[id * 6 + f] / 255.0, light, emit)
+		var col := Color(0.96, (fl[id * 6 + f] if lay < 0 else lay) / 255.0, light, emit)
 		_quad(v, n, c, idx, o + mn + CPOS[b] * sz, o + mn + CPOS[b + 1] * sz, o + mn + CPOS[b + 2] * sz, o + mn + CPOS[b + 3] * sz, NRM[f], col)
 
 
@@ -167,6 +167,16 @@ static func _wedge(v: PackedVector3Array, n: PackedVector3Array, c: PackedColorA
 	var nr := _rn(Vector3(1, 0, 0), rot)
 	if Blocks.OPQ[pb[i + ND[_face_of(nr)]]] == 0:
 		_tri(v, n, c, idx, b, cc, f, nr, Color(0.96, side, light, 0))
+
+
+## Lados em que a cerca se conecta (1 +X, 2 -X, 4 +Z, 8 -Z), olhando o array acolchoado.
+static func _fence_mask(pb: PackedInt32Array, i: int) -> int:
+	var m := 0
+	if Blocks.fence_links(pb[i + 1]): m |= 1
+	if Blocks.fence_links(pb[i - 1]): m |= 2
+	if Blocks.fence_links(pb[i + PS]): m |= 4
+	if Blocks.fence_links(pb[i - PS]): m |= 8
+	return m
 
 
 ## nb: 9 arrays de blocos (dz+1)*3+(dx+1); nsh: 9 dicionarios de formas; top: altura maxima ocupada.
@@ -322,12 +332,20 @@ static func build(nb: Array, nsh: Array, top: int, cx: int, cz: int, lite: bool 
 								var nv := Vector3i(x, y, z) + Vector3i(NRM[f])
 								nbgs.append(_micro_at(nmi, nv.x, nv.y, nv.z) if pb[ni] >= 256 else null)
 							Micro.mesh_cell(g, o, nbids, nbgs, light, ov, on, oc, oi, gv, gn, gc, gi)
-					elif KIND[id] == 6:
-						for mb: Array in Blocks.MODELS[id * 4 + ((sb >> 4) & 3)]:
+					elif id == Blocks.FENCE:
+						for mb: Array in Blocks.fence_model(_fence_mask(pb, i)):
 							_mbox(ov, on, oc, oi, o, mb[0], mb[1], light, pb, i)
+					elif KIND[id] == 6:
+						if Blocks.model_is_glass(id, sb):
+							for mb: Array in Blocks.model(id, sb):
+								_mbox(gv, gn, gc, gi, o, mb[0], mb[1], light, pb, i)
+						else:
+							for mb: Array in Blocks.model(id, sb):
+								_mbox(ov, on, oc, oi, o, mb[0], mb[1], light, pb, i)
 					elif KIND[id] == 5:
+						var vl := Blocks.var_layer(id, sb)
 						for bx: AABB in Blocks.SHAPE_BOXES[sb & 63]:
-							_box(gv, gn, gc, gi, o, bx, id, light, 1.0, pb, i)
+							_box(gv, gn, gc, gi, o, bx, id, light, 1.0, pb, i, vl)
 					elif (sb & 15) == Blocks.SH_WEDGE:
 						_wedge(ov, on, oc, oi, o, (sb >> 4) & 3, id, light, pb, i)
 					else:
@@ -484,6 +502,10 @@ static func build(nb: Array, nsh: Array, top: int, cx: int, cz: int, lite: bool 
 								wc.append(Color(1.0 if is_top else 0.0, 0.0, light, 1.0))
 							wi.append(vb); wi.append(vb + 2); wi.append(vb + 1)
 							wi.append(vb); wi.append(vb + 3); wi.append(vb + 2)
+				elif kind == 5 and Blocks.PANE[id] == 1:
+					# Lamina sem forma (ex.: item na mao): desenha centralizada.
+					for bx: AABB in Blocks.SHAPE_BOXES[Blocks.SH_PANE]:
+						_box(gv, gn, gc, gi, o, bx, id, sl[i] * inv255, 1.0, pb, i)
 				elif kind == 5:
 					for f in 6:
 						var ni := i + nd[f]
@@ -495,7 +517,8 @@ static func build(nb: Array, nsh: Array, top: int, cx: int, cz: int, lite: bool 
 							Color(1.0, FL[id * 6 + f] * inv255, sl[ni] * inv255, 1.0))
 				elif kind == 6:
 					var mlight := sl[i] * inv255
-					for mb: Array in Blocks.MODELS[id * 4]:
+					var mparts: Array = Blocks.fence_model(_fence_mask(pb, i)) if id == Blocks.FENCE else Blocks.model(id, 0)
+					for mb: Array in mparts:
 						_mbox(ov, on, oc, oi, o, mb[0], mb[1], mlight, pb, i)
 				i += 1
 

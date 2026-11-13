@@ -277,6 +277,42 @@ func set_state(s: int) -> void:
 	_state_timer = 150.0
 
 
+## Eventos noturnos sorteados por noite (iguais para todos os jogadores da mesma semente):
+## 0 = nada, 1 = aurora boreal, 2 = chuva de estrelas cadentes. force_event (>= 0) fixa um evento.
+var night_event := 0
+var force_event := -1
+var _aurora := 0.0
+var _meteors := 0.0
+const EVENT_NAMES: Array[String] = ["", "Aurora boreal", "Chuva de estrelas cadentes"]
+
+
+func night_event_for(night: int) -> int:
+	var sd: int = world.gen.seed_v if world != null and world.gen != null else 0
+	var h := (night * 73856093) ^ (sd * 19349663) ^ 0x5bd1e995
+	h = (h ^ (h >> 13)) * 1274126177
+	var r := float((h ^ (h >> 16)) & 0xFFFF) / 65535.0
+	if r < 0.22:
+		return 1
+	if r < 0.50:
+		return 2
+	return 0
+
+
+func _night_events(delta: float, overcast: float) -> void:
+	# A noite que comeca ao entardecer do dia "day" vai ate a manha seguinte.
+	var night := day if time_of_day >= 0.5 else day - 1
+	night_event = force_event if force_event >= 0 else night_event_for(night)
+	var dark := 1.0 - smoothstep(-0.16, 0.02, sun_dir.y)
+	var sky_ok := 1.0 - overcast
+	var ta := (1.0 if night_event == 1 else 0.0) * dark * sky_ok * (1.0 if dim == 0 else 0.0)
+	var tm := (1.0 if night_event == 2 else 0.0) * dark * sky_ok * (1.0 if dim == 0 else 0.0)
+	_aurora = lerpf(_aurora, ta, 1.0 - exp(-delta * 0.4))
+	_meteors = lerpf(_meteors, tm, 1.0 - exp(-delta * 0.6))
+	sky_mat.set_shader_parameter("aurora", _aurora)
+	sky_mat.set_shader_parameter("meteors", _meteors)
+	sky_mat.set_shader_parameter("event_seed", float(posmod(night * 7919, 1000)) / 1000.0)
+
+
 func season_name() -> String:
 	return SEASON_NAMES[int(season) % 4]
 
@@ -395,6 +431,7 @@ func _apply(delta: float) -> void:
 	sky_mat.set_shader_parameter("coverage", cloud)
 	sky_mat.set_shader_parameter("overcast", overcast)
 	sky_mat.set_shader_parameter("lightning", flick)
+	_night_events(delta, overcast)
 
 	# Neblina.
 	if underwater:
@@ -486,7 +523,8 @@ func set_dim(d: int) -> void:
 func _update_particles(wd: Vector2, sun_up: float) -> void:
 	var cp := camera.global_position
 	if world != null:
-		cold = world.gen.temperature(cp.x, cp.z) < -0.32 or cp.y > WorldGen.SEA + 52 or snow_cover > 0.5
+		# Mesmas estacoes em todo o mapa: neva no inverno (e no alto das montanhas), chove nas outras estacoes.
+		cold = snow_cover > 0.5 or cp.y > WorldGen.SEA + 70
 	var drift := Vector3(wd.x, 0, wd.y) * wind_eff
 	_hf.global_position = Vector3(snappedf(cp.x, 2.0), snappedf(cp.y, 2.0), snappedf(cp.z, 2.0))
 	_rain_p.global_position = cp + Vector3(0, 15, 0) - drift * 3.0

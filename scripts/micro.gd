@@ -309,9 +309,22 @@ static func mesh_cell(g: PackedByteArray, o: Vector3, nbids: Array, nbgs: Array,
 					a += wa
 
 
+## Gira a grade em passos de 90 graus no eixo Y (mesmo sentido de Structures.rot_local).
+static func rotate_y(g: PackedByteArray, rot: int) -> PackedByteArray:
+	var out := g
+	for k in rot % 4:
+		var n := empty()
+		for y in N:
+			for z in N:
+				for x in N:
+					n[i3(N - 1 - z, y, x)] = out[i3(x, y, z)]
+		out = n
+	return out
+
+
 ## Converte qualquer bloco cubico em celula micro do mesmo material.
 static func can_micro(id: int) -> bool:
 	if id <= 0 or id >= 256:
 		return false
 	var k := Blocks.KIND[id]
-	return (k == Blocks.K_CUBE or k == Blocks.K_GLASS) and id != Blocks.PORTAL_FIRE and id != Blocks.PORTAL_ASTRAL and id != Blocks.BEDROCK
+	return (k == Blocks.K_CUBE or k == Blocks.K_GLASS) and Blocks.PANE[id] == 0 and not Blocks.VAR_LAYERS.has(id) and id != Blocks.PORTAL_FIRE and id != Blocks.PORTAL_ASTRAL and id != Blocks.BEDROCK

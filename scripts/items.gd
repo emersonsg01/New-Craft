@@ -24,6 +24,34 @@ static var MATS: Array = [
 	["ouro", Color(0.80, 0.56, 0.08), Color(1.0, 0.86, 0.32), 2.0, 2, 12.0, 40],
 	["cristal", Color(0.14, 0.58, 0.74), Color(0.62, 0.96, 1.0), 4.0, 5, 8.0, 1500],
 ]
+## Materiais mistos (adicionados no fim para nao mudar os ids antigos):
+## [nome, escura, clara, dano, nivel, velocidade, durabilidade, ingrediente, cor do cabo]
+static var MIXED: Array = [
+	["aço", Color(0.44, 0.47, 0.52), Color(0.84, 0.88, 0.94), 3.0, 4, 7.5, 600, "Lingote de aço", Color(0.22, 0.14, 0.10)],
+	["bronze", Color(0.52, 0.34, 0.14), Color(0.88, 0.66, 0.36), 2.0, 3, 5.5, 320, "Lingote de bronze", Color(0.36, 0.22, 0.12)],
+	["obsidiana", Color(0.07, 0.05, 0.10), Color(0.40, 0.28, 0.58), 3.6, 5, 6.0, 1800, "#obsidiana", Color(0.30, 0.30, 0.34)],
+	["osso", Color(0.70, 0.68, 0.60), Color(0.96, 0.94, 0.88), 1.0, 2, 3.5, 110, "Osso", Color(0.86, 0.84, 0.76)],
+	["ferro dourado", Color(0.58, 0.56, 0.50), Color(0.98, 0.86, 0.44), 2.6, 4, 9.0, 320, "Lingote de ferro dourado", Color(0.42, 0.10, 0.12)],
+	["cristal rubi", Color(0.52, 0.10, 0.30), Color(0.98, 0.48, 0.78), 4.6, 5, 9.5, 1700, "Cristal rubi", Color(0.86, 0.70, 0.24)],
+]
+## Armaduras mistas: [nome, escura, clara, pontos, ingrediente]
+static var ARMOR_MATS2: Array = [
+	["malha", Color(0.36, 0.38, 0.42), Color(0.66, 0.68, 0.72), 1.8, "Corrente"],
+	["aço", Color(0.44, 0.47, 0.52), Color(0.84, 0.88, 0.94), 2.5, "Lingote de aço"],
+	["bronze", Color(0.52, 0.34, 0.14), Color(0.80, 0.58, 0.28), 1.7, "Lingote de bronze"],
+	["couro tachado", Color(0.20, 0.13, 0.08), Color(0.40, 0.26, 0.14), 1.4, "Couro tachado"],
+	["obsidiana", Color(0.07, 0.05, 0.10), Color(0.30, 0.20, 0.46), 3.2, "#obsidiana"],
+	["cristal rubi", Color(0.52, 0.10, 0.30), Color(0.96, 0.44, 0.74), 3.3, "Cristal rubi"],
+]
+## Selas: [nome, couro/assento, enfeite, manta, modelo, velocidade, desenho]
+static var SADDLES: Array = [
+	["Sela de couro", Color(0.42, 0.24, 0.12), Color(0.26, 0.16, 0.09), Color(0.30, 0.42, 0.62), "", 1.0],
+	["Sela de couro com ferro", Color(0.36, 0.20, 0.10), Color(0.62, 0.64, 0.68), Color(0.20, 0.22, 0.26), "", 1.05],
+	["Sela de couro com cobre", Color(0.40, 0.22, 0.11), Color(0.86, 0.52, 0.28), Color(0.20, 0.42, 0.30), "", 1.05],
+	["Sela cerimonial de ouro", Color(0.52, 0.10, 0.12), Color(0.98, 0.80, 0.30), Color(0.60, 0.08, 0.10), "cerimonial", 1.15],
+	["Sela de viagem", Color(0.46, 0.30, 0.16), Color(0.30, 0.20, 0.12), Color(0.62, 0.52, 0.30), "viagem", 1.0],
+	["Sela de guerra de aço", Color(0.22, 0.14, 0.10), Color(0.80, 0.84, 0.90), Color(0.54, 0.08, 0.08), "guerra", 0.95],
+]
 ## [nome, cor escura, cor clara, pontos de armadura]
 static var ARMOR_MATS: Array = [
 	["couro", Color(0.36, 0.22, 0.11), Color(0.56, 0.36, 0.19), 1.0],
@@ -109,6 +137,86 @@ static func _static_init() -> void:
 	for i in BOAT_WOODS.size():
 		var bw: Array = BOAT_WOODS[i]
 		_add({"name": "Barco de " + str(bw[0]), "cat": "Ferramentas", "kind": "boat", "draw": "boat", "c0": bw[1], "c1": bw[2], "wood": i})
+	_add({"name": "Corrente", "cat": "Diversos", "kind": "misc", "draw": "chain", "c0": Color(0.36, 0.37, 0.40), "c1": Color(0.78, 0.80, 0.84)})
+	# Portas com variante: simples (1x2), dupla (2x2) e portao grande (2x4).
+	var sizes := [["Porta", 1, 2, "door1"], ["Porta dupla", 2, 2, "door2"], ["Portão grande", 2, 4, "door4"]]
+	# Mesma ordem de Blocks.DOOR_VARS/WIN_VARS (sem depender da inicializacao de Blocks).
+	var door_vars: Array = []
+	var win_vars: Array = []
+	for bw: Array in BOAT_WOODS:
+		var wn: String = bw[0]
+		door_vars.append({"name": "de " + wn, "style": "plain", "wood": wn})
+		door_vars.append({"name": "de %s com ferro" % wn, "style": "iron", "wood": wn})
+		door_vars.append({"name": "de %s com cobre" % wn, "style": "copper", "wood": wn})
+		door_vars.append({"name": "de vidro com " + wn, "style": "glass", "wood": wn})
+		win_vars.append({"name": "de " + wn, "style": "plain", "wood": wn})
+		win_vars.append({"name": "de %s com ferro" % wn, "style": "iron", "wood": wn})
+		win_vars.append({"name": "de %s com cobre" % wn, "style": "copper", "wood": wn})
+	door_vars.append({"name": "de vidro com ferro", "style": "glass_iron", "wood": ""})
+	door_vars.append({"name": "de vidro com cobre", "style": "glass_copper", "wood": ""})
+	for v in door_vars.size():
+		var dv: Dictionary = door_vars[v]
+		var cols := _var_colors(str(dv["style"]), str(dv["wood"]))
+		for sz: Array in sizes:
+			_add({"name": "%s %s" % [sz[0], dv["name"]], "cat": "Portas", "kind": "door", "draw": sz[3], "c0": cols[0], "c1": cols[1],
+				"mat": str(dv["style"]), "variant": v, "w": sz[1], "h": sz[2]})
+	# Janelas (bloco) e vidracas (laminas finas) com variante.
+	for v in win_vars.size():
+		var wv: Dictionary = win_vars[v]
+		var cols := _var_colors(str(wv["style"]), str(wv["wood"]))
+		_add({"name": "Janela " + str(wv["name"]), "cat": "Janelas", "kind": "window", "draw": "window", "c0": cols[0], "c1": cols[1],
+			"mat": str(wv["style"]), "variant": v, "block": Blocks.WINDOWV})
+	for v in win_vars.size():
+		var wv: Dictionary = win_vars[v]
+		var cols := _var_colors(str(wv["style"]), str(wv["wood"]))
+		_add({"name": "Vidraça " + str(wv["name"]), "cat": "Janelas", "kind": "window", "draw": "pane", "c0": cols[0], "c1": cols[1],
+			"mat": str(wv["style"]), "variant": v, "block": Blocks.PANEV})
+	_add({"name": "Ponte levadiça", "cat": "Portas", "kind": "drawbridge", "draw": "drawbridge", "c0": Color(0.30, 0.19, 0.10), "c1": Color(0.50, 0.33, 0.17), "mat": "iron"})
+	# ---------- materiais mistos ----------
+	_add({"name": "Lingote de aço", "cat": "Diversos", "kind": "misc", "draw": "ingot", "c0": MIXED[0][1], "c1": MIXED[0][2]})
+	_add({"name": "Lingote de bronze", "cat": "Diversos", "kind": "misc", "draw": "ingot", "c0": MIXED[1][1], "c1": MIXED[1][2]})
+	_add({"name": "Lingote de ferro dourado", "cat": "Diversos", "kind": "misc", "draw": "ingot", "c0": MIXED[4][1], "c1": MIXED[4][2]})
+	_add({"name": "Cristal rubi", "cat": "Diversos", "kind": "misc", "draw": "gem", "c0": MIXED[5][1], "c1": MIXED[5][2]})
+	_add({"name": "Couro tachado", "cat": "Diversos", "kind": "misc", "draw": "leather", "c0": ARMOR_MATS2[3][1], "c1": ARMOR_MATS2[3][2]})
+	for m: Array in MIXED:
+		for t: Array in tools:
+			_add({"name": "%s de %s" % [t[1], m[0]], "cat": "Ferramentas", "kind": "tool", "draw": t[0], "c0": m[1], "c1": m[2],
+				"dmg": t[2] + m[3] * 0.5, "cd": 0.4, "reach": 3.6, "tool": t[3], "mat": m[0], "tier": m[4], "speed": m[5], "dur": m[6]})
+		for w: Array in weapons:
+			_add({"name": "%s de %s" % [w[1], m[0]], "cat": "Armas", "kind": "weapon", "draw": w[0], "c0": m[1], "c1": m[2],
+				"dmg": w[2] + m[3], "cd": w[3], "reach": w[4], "tool": 0, "mat": m[0], "dur": m[6]})
+	# Armas novas para todos os materiais (puros e mistos).
+	var weapons2 := [["warhammer", "Martelo de guerra", 6.2, 0.78, 3.4], ["halberd", "Alabarda", 5.0, 0.62, 5.2], ["saber", "Sabre", 3.8, 0.3, 3.5],
+		["scythe", "Foice de guerra", 4.8, 0.52, 4.0]]
+	for w: Array in weapons2:
+		for m: Array in MATS + MIXED:
+			_add({"name": "%s de %s" % [w[1], m[0]], "cat": "Armas", "kind": "weapon", "draw": w[0], "c0": m[1], "c1": m[2],
+				"dmg": w[2] + m[3], "cd": w[3], "reach": w[4], "tool": 0, "mat": m[0], "dur": m[6]})
+	_add({"name": "Besta", "cat": "Armas", "kind": "bow", "draw": "crossbow", "c0": WOOD_D, "c1": Color(0.62, 0.64, 0.68), "dmg": 8.5, "cd": 1.4, "reach": 48.0, "tool": 0, "dur": 400})
+	for s2 in 4:
+		for m: Array in ARMOR_MATS2:
+			_add({"name": "%s de %s" % [SLOT_NAMES[s2], m[0]], "cat": "Armaduras", "kind": "armor", "draw": shapes[s2], "c0": m[1], "c1": m[2],
+				"slot": s2, "armor": m[3] * factor[s2], "mat": "a_" + str(m[0])})
+	# ---------- produtos de animais ----------
+	_add({"name": "Ovo", "cat": "Diversos", "kind": "food", "draw": "egg", "c0": Color(0.86, 0.78, 0.62), "c1": Color(0.98, 0.95, 0.88), "heal": 2.0})
+	_add({"name": "Balde de leite", "cat": "Diversos", "kind": "food", "draw": "bucket_m", "c0": Color(0.50, 0.52, 0.56), "c1": Color(0.82, 0.84, 0.88), "heal": 4.0, "returns": "Balde"})
+	_add({"name": "Tesoura", "cat": "Ferramentas", "kind": "shears", "draw": "shears", "c0": Color(0.50, 0.52, 0.56), "c1": Color(0.86, 0.88, 0.92), "dur": 238})
+	# ---------- oficios: tecidos, couro curtido, roupas, escudos e capacete de minerador ----------
+	_add({"name": "Tecido", "cat": "Diversos", "kind": "misc", "draw": "cloth_roll", "c0": Color(0.62, 0.56, 0.46), "c1": Color(0.90, 0.86, 0.76)})
+	_add({"name": "Couro curtido", "cat": "Diversos", "kind": "misc", "draw": "leather", "c0": Color(0.28, 0.16, 0.08), "c1": Color(0.46, 0.28, 0.14)})
+	var clothes := [["Chapéu de palha", "hat", 1, Color(0.70, 0.56, 0.24), Color(0.90, 0.78, 0.42)], ["Capuz", "hat", 2, Color(0.20, 0.30, 0.18), Color(0.34, 0.46, 0.28)],
+		["Gorro", "hat", 3, Color(0.50, 0.10, 0.10), Color(0.78, 0.22, 0.20)], ["Bandana", "hat", 4, Color(0.12, 0.20, 0.50), Color(0.26, 0.40, 0.80)],
+		["Túnica", "outfit", 1, Color(0.40, 0.30, 0.20), Color(0.62, 0.48, 0.32)], ["Avental", "outfit", 2, Color(0.30, 0.22, 0.16), Color(0.50, 0.38, 0.26)],
+		["Manto", "outfit", 3, Color(0.30, 0.10, 0.30), Color(0.52, 0.22, 0.52)], ["Colete", "outfit", 4, Color(0.34, 0.20, 0.10), Color(0.56, 0.36, 0.18)]]
+	for c: Array in clothes:
+		_add({"name": c[0], "cat": "Roupas", "kind": "clothing", "draw": "hat" if c[1] == "hat" else "garment", "c0": c[3], "c1": c[4], "slot_k": c[1], "value": c[2]})
+	_add({"name": "Escudo de madeira", "cat": "Armas", "kind": "shield", "draw": "shield", "c0": WOOD_D, "c1": WOOD_L, "block": 0.4, "dur": 180, "mat": "madeira"})
+	_add({"name": "Escudo de ferro", "cat": "Armas", "kind": "shield", "draw": "shield", "c0": Color(0.50, 0.52, 0.56), "c1": Color(0.86, 0.88, 0.92), "block": 0.6, "dur": 420, "mat": "ferro"})
+	_add({"name": "Capacete de minerador", "cat": "Armaduras", "kind": "armor", "draw": "helmet", "c0": Color(0.80, 0.62, 0.10), "c1": Color(0.96, 0.80, 0.20),
+		"slot": 0, "armor": 1.6, "mat": "a_minerador", "light": true})
+	# ---------- selas ----------
+	for sd: Array in SADDLES:
+		_add({"name": sd[0], "cat": "Montaria", "kind": "saddle", "draw": "saddle", "c0": sd[1], "c1": sd[2], "blanket": sd[3], "style": sd[4], "speed": sd[5]})
 
 
 ## [nome, escura, clara, tabuas]
@@ -122,14 +230,40 @@ static var BOAT_WOODS: Array = [
 ]
 
 
+## Cores (madeira ou metal) de uma variante de porta/janela.
+static func _var_colors(style: String, wood: String) -> Array:
+	for w: Array in BOAT_WOODS:
+		if w[0] == wood:
+			return [w[1], w[2]]
+	if style.ends_with("copper"):
+		return [Blocks.COPPER_C0, Blocks.COPPER_C1]
+	return [Blocks.IRON_C0, Blocks.IRON_C1]
+
+
+## Item que corresponde a um bloco com variante (porta pelo tamanho; janela/vidraca).
+static func for_variant(kind: String, block: int, v: int, w: int = 1, h: int = 2) -> int:
+	for i in DEFS.size():
+		var d: Dictionary = DEFS[i]
+		if d["kind"] != kind or int(d.get("variant", -1)) != v:
+			continue
+		if kind == "door" and (int(d["w"]) != w or int(d["h"]) != h):
+			continue
+		if kind == "window" and int(d["block"]) != block:
+			continue
+		return BASE + i
+	return 0
+
+
 ## Quantos cabem numa pilha.
 static func max_stack(id: int) -> int:
 	if id <= 0:
 		return 0
 	if id >= BASE:
 		var k: String = DEFS[id - BASE]["kind"]
-		if k in ["tool", "weapon", "bow", "armor", "igniter", "boat", "bucket"]:
+		if k in ["tool", "weapon", "bow", "armor", "igniter", "boat", "bucket", "saddle", "shears", "shield", "clothing"]:
 			return 1
+		if k == "drawbridge":
+			return 4
 		return 64
 	return 64
 
@@ -178,8 +312,12 @@ static func mesh(id: int) -> ArrayMesh:
 	return _meshes[id]
 
 
+static var _cur_handle := Color(0.58, 0.40, 0.21)
+
+
 static func _handle(cv: VoxelArt.Canvas, x1: float = 10.0, y1: float = 5.0) -> void:
-	cv.line(2, 13, x1, y1, WOOD_L, 1.4)
+	cv.line(2, 13, x1, y1, _cur_handle, 1.4)
+	cv.line(2.5, 12.5, x1 - 0.5, y1 + 0.5, _cur_handle.darkened(0.25), 0.4)
 
 
 ## Cor da guarda e da gema do pomo conforme o material.
@@ -191,7 +329,21 @@ static func _accent(mat: String) -> Array:
 		"ferro": return [Color(0.72, 0.56, 0.20), Color(0.85, 0.12, 0.16)]
 		"ouro": return [Color(0.95, 0.80, 0.30), Color(0.20, 0.50, 0.95)]
 		"cristal": return [Color(0.80, 0.82, 0.88), Color(0.70, 1.0, 1.0)]
+		"aço": return [Color(0.30, 0.31, 0.34), Color(0.95, 0.30, 0.20)]
+		"bronze": return [Color(0.70, 0.52, 0.22), Color(0.20, 0.62, 0.55)]
+		"obsidiana": return [Color(0.55, 0.40, 0.80), Color(0.80, 0.55, 1.0)]
+		"osso": return [Color(0.60, 0.58, 0.50), Color(0.30, 0.28, 0.26)]
+		"ferro dourado": return [Color(0.98, 0.80, 0.30), Color(0.20, 0.45, 0.95)]
+		"cristal rubi": return [Color(0.98, 0.82, 0.30), Color(1.0, 0.30, 0.50)]
 	return [Color(0.3, 0.3, 0.34), Color(0.8, 0.2, 0.2)]
+
+
+## Cor do cabo das ferramentas/armas do material.
+static func _handle_col(mat: String) -> Color:
+	for m: Array in MIXED:
+		if m[0] == mat:
+			return m[8]
+	return WOOD_L
 
 
 ## Cabo de couro enrolado.
@@ -203,11 +355,71 @@ static func _grip(cv: VoxelArt.Canvas, x0: float, y0: float, x1: float, y1: floa
 		cv.setp(int(lerpf(x0, x1, t)), int(lerpf(y0, y1, t)), Color(0.52, 0.34, 0.18))
 
 
+## Icone de porta/janela: moldura, tabuas ou vidro, cintas de metal e macaneta.
+static func _draw_door(cv: VoxelArt.Canvas, shape: String, c0: Color, c1: Color, mat: String) -> void:
+	var glass_c := Color(0.62, 0.84, 0.92, 0.85)
+	var metal := Color(0.42, 0.44, 0.48) if mat == "iron" or mat == "glass_iron" else Color(0.72, 0.42, 0.22)
+	var x0 := 4
+	var x1 := 11
+	var y0 := 1
+	var y1 := 14
+	match shape:
+		"door2":
+			x0 = 1
+			x1 = 14
+			y0 = 2
+			y1 = 13
+		"door4":
+			x0 = 2
+			x1 = 13
+			y0 = 0
+			y1 = 15
+		"window":
+			x0 = 2
+			x1 = 13
+			y0 = 2
+			y1 = 13
+		"pane":
+			x0 = 6
+			x1 = 9
+			y0 = 1
+			y1 = 14
+	var is_glass := mat.begins_with("glass") or shape == "window" or shape == "pane"
+	for y in range(y0, y1 + 1):
+		for x in range(x0, x1 + 1):
+			var edge := x == x0 or x == x1 or y == y0 or y == y1
+			var c := c0 if edge else c1
+			if not edge:
+				if is_glass:
+					c = glass_c
+					if (x + y) % 7 == 0:
+						c = Color(0.95, 0.99, 1.0)
+				elif (x - x0) % 3 == 0:
+					c = c1.darkened(0.2)
+			cv.setp(x, y, c)
+	var mid := (x0 + x1) / 2
+	if shape == "door2" or shape == "door4":
+		cv.rect(mid, y0, mid + 1, y1, c0)
+	if shape == "window" or shape == "pane":
+		cv.rect(x0, (y0 + y1) / 2, x1, (y0 + y1) / 2, c0 if mat == "plain" else metal)
+		if shape == "window":
+			cv.rect(mid, y0, mid, y1, c0 if mat == "plain" else metal)
+	if mat == "iron" or mat == "copper":
+		for yy in [y0 + 3, y1 - 3]:
+			cv.rect(x0, yy, x1, yy, metal)
+	if shape.begins_with("door"):
+		cv.setp(x1 - 2, (y0 + y1) / 2, Color(0.86, 0.66, 0.24))
+		if shape != "door1":
+			cv.setp(mid + 3, (y0 + y1) / 2, Color(0.86, 0.66, 0.24))
+			cv.setp(mid - 2, (y0 + y1) / 2, Color(0.86, 0.66, 0.24))
+
+
 static func _draw(shape: String, c0: Color, c1: Color, mat: String = "") -> VoxelArt.Canvas:
 	var cv := VoxelArt.Canvas.new()
 	var clear := VoxelArt.CLEAR
 	var acc := _accent(mat)
 	var shine := c1.lightened(0.45)
+	_cur_handle = _handle_col(mat)
 	match shape:
 		"pick":
 			_handle(cv)
@@ -296,6 +508,14 @@ static func _draw(shape: String, c0: Color, c1: Color, mat: String = "") -> Voxe
 			cv.setp(13, 14, Color(0.90, 0.90, 0.85))
 		"helmet":
 			cv.rect(3, 3, 12, 10, c1)
+			if mat == "a_minerador":
+				cv.rect(6, 4, 9, 6, Color(0.30, 0.30, 0.32))
+				cv.rect(7, 4, 8, 5, Color(1.0, 0.95, 0.70))
+			if mat == "a_malha":
+				for y in range(3, 11):
+					for x in range(3, 13):
+						if (x + y) % 2 == 0:
+							cv.setp(x, y, c0)
 			cv.rect(4, 2, 11, 2, c1)
 			cv.rect(3, 6, 12, 6, c0)
 			cv.rect(5, 7, 10, 10, clear)
@@ -338,6 +558,77 @@ static func _draw(shape: String, c0: Color, c1: Color, mat: String = "") -> Voxe
 			cv.rect(9, 12, 14, 12, c0.darkened(0.3))
 			cv.setp(3, 7, shine)
 			cv.setp(10, 7, shine)
+		"door1", "door2", "door4", "window", "pane":
+			_draw_door(cv, shape, c0, c1, mat)
+		"warhammer":
+			_handle(cv, 10.0, 5.0)
+			cv.rect(8, 1, 14, 5, c0)
+			cv.rect(9, 2, 13, 4, c1)
+			cv.rect(13, 1, 14, 5, shine)
+			cv.rect(7, 2, 8, 4, c0.darkened(0.2))
+			cv.setp(10, 3, acc[1])
+		"halberd":
+			cv.line(1, 15, 12, 4, _cur_handle, 1.2)
+			cv.line(11, 5, 15, 1, c1, 1.0)
+			for y in range(1, 8):
+				for x in range(8, 16):
+					var dd := Vector2(x - 13.5, y - 4.0).length()
+					if dd < 3.3 and x > 10:
+						cv.setp(x, y, shine if dd > 2.6 else c1)
+			cv.line(8, 6, 6, 4, c0, 1.0)
+			cv.rect(10, 5, 11, 6, acc[0])
+		"saber":
+			cv.bezier(Vector2(5, 10), Vector2(9, 3), Vector2(14, 1), c0, 2.0)
+			cv.bezier(Vector2(5.4, 9.6), Vector2(9.2, 3.2), Vector2(13.8, 1.2), c1, 1.1)
+			cv.setp(14, 1, shine)
+			cv.bezier(Vector2(2, 9), Vector2(5, 13), Vector2(7, 11), acc[0], 1.0)
+			_grip(cv, 2.6, 12.4, 4.4, 10.6)
+			cv.setp(2, 13, acc[1])
+		"scythe":
+			cv.line(2, 15, 11, 2, _cur_handle, 1.2)
+			cv.bezier(Vector2(10, 3), Vector2(4, 0), Vector2(1, 5), c0, 1.8)
+			cv.bezier(Vector2(10, 3.2), Vector2(4.5, 0.6), Vector2(1.6, 5.0), c1, 0.9)
+			cv.setp(1, 5, shine)
+			cv.rect(9, 3, 10, 4, acc[0])
+		"crossbow":
+			cv.line(3, 13, 12, 4, c0, 1.4)
+			cv.bezier(Vector2(5, 3), Vector2(12, 7), Vector2(13, 13), c1, 1.4)
+			cv.line(5, 3, 13, 13, Color(0.88, 0.88, 0.82), 0.5)
+			cv.rect(6, 9, 8, 10, Color(0.30, 0.30, 0.34))
+			cv.setp(12, 4, Color(0.6, 0.62, 0.66))
+		"saddle":
+			var bl: Color = c1
+			cv.rect(2, 8, 13, 10, bl.lerp(Color(0.5, 0.1, 0.1), 0.0))
+			for x in range(3, 13):
+				for y in range(4, 9):
+					var e := Vector2((x - 7.5) / 5.0, (y - 8.0) / 4.0).length()
+					if e < 1.0:
+						cv.setp(x, y, c0 if e > 0.6 else c0.lightened(0.15))
+			cv.rect(3, 3, 4, 6, c0.darkened(0.2))
+			cv.rect(11, 4, 12, 6, c0.darkened(0.2))
+			cv.line(5, 10, 5, 14, c0.darkened(0.3), 0.6)
+			cv.rect(4, 14, 6, 14, c1)
+			cv.line(10, 10, 10, 14, c0.darkened(0.3), 0.6)
+			cv.rect(9, 14, 11, 14, c1)
+		"chain":
+			for k in 4:
+				var y := 2 + k * 3
+				var x := 5 + (k % 2) * 3
+				cv.rect(x, y, x + 3, y, c1)
+				cv.rect(x, y + 3, x + 3, y + 3, c0)
+				cv.rect(x, y, x, y + 3, c1)
+				cv.rect(x + 3, y, x + 3, y + 3, c0)
+		"drawbridge":
+			for y in range(1, 15):
+				for x in range(3, 13):
+					var pl := (x - 3) / 3
+					cv.setp(x, y, (c0 if (x - 3) % 3 == 0 else c1).lerp(c0, 0.15 * (pl % 2)))
+			for y in [4, 11]:
+				cv.rect(3, y, 12, y, Color(0.42, 0.44, 0.48))
+				cv.setp(5, y, Color(0.8, 0.82, 0.86))
+				cv.setp(10, y, Color(0.8, 0.82, 0.86))
+			cv.line(2, 1, 1, 14, Color(0.6, 0.62, 0.66), 0.8)
+			cv.line(13, 1, 14, 14, Color(0.6, 0.62, 0.66), 0.8)
 		"apple":
 			cv.disc(8, 9.5, 4.6, c0)
 			cv.disc(6.5, 8.0, 1.3, c1)
@@ -458,13 +749,55 @@ static func _draw(shape: String, c0: Color, c1: Color, mat: String = "") -> Voxe
 			cv.disc(11.5, 6.5, 2.6, Color(0.18, 0.18, 0.2))
 			cv.setp(12, 3, Color(1.0, 0.8, 0.3))
 			cv.setp(14, 4, Color(1.0, 0.6, 0.2))
-		"bucket", "bucket_w", "bucket_l":
+		"cloth_roll":
+			cv.rect(3, 4, 12, 11, c1)
+			for x in range(3, 13, 3):
+				cv.rect(x, 4, x, 11, c0)
+			cv.disc(12.5, 7.5, 3.6, c0)
+			cv.disc(12.5, 7.5, 2.0, c1)
+		"hat":
+			cv.rect(2, 10, 13, 11, c0)
+			cv.rect(4, 5, 11, 10, c1)
+			cv.rect(4, 8, 11, 8, c0)
+		"garment":
+			cv.rect(4, 3, 11, 13, c1)
+			cv.rect(1, 3, 4, 7, c1)
+			cv.rect(11, 3, 14, 7, c1)
+			cv.rect(6, 3, 9, 4, VoxelArt.CLEAR)
+			cv.rect(7, 5, 8, 12, c0)
+		"shield":
+			for y in 16:
+				for x in 16:
+					var e := Vector2((x - 7.5) / 6.0, (y - 6.5) / 8.0).length()
+					if e < 1.0 and y < 15:
+						cv.setp(x, y, c0 if e > 0.82 else c1)
+			cv.rect(7, 2, 8, 13, c0)
+			cv.rect(3, 6, 12, 7, c0)
+			cv.disc(7.5, 6.5, 1.4, Color(0.86, 0.66, 0.24))
+		"egg":
+			for y in 16:
+				for x in 16:
+					var e := Vector2((x - 7.5) / 4.2, (y - 8.8) / 5.4).length()
+					if e < 1.0:
+						cv.setp(x, y, c1 if e < 0.75 else c0)
+			cv.rect(6, 5, 7, 6, Color(1, 1, 1))
+		"shears":
+			cv.line(3, 3, 9, 9, c1, 1.2)
+			cv.line(9, 3, 3, 9, c1, 1.2)
+			cv.setp(6, 6, c0)
+			cv.disc(10.5, 11.5, 2.0, Color(0.70, 0.15, 0.12))
+			cv.disc(10.5, 11.5, 0.9, VoxelArt.CLEAR)
+			cv.disc(12.5, 9.0, 2.0, Color(0.70, 0.15, 0.12))
+			cv.disc(12.5, 9.0, 0.9, VoxelArt.CLEAR)
+			cv.line(9, 9, 10.5, 10.5, c0, 0.8)
+			cv.line(9, 9, 12, 9, c0, 0.8)
+		"bucket", "bucket_w", "bucket_l", "bucket_m":
 			for y in range(5, 14):
 				var w := 5.0 - (y - 5) * 0.28
 				cv.line(8.0 - w, y, 8.0 + w, y, c1 if y > 5 else c0, 1.0)
 			cv.bezier(Vector2(3, 5), Vector2(8, -1), Vector2(13, 5), c0, 0.8)
 			if shape != "bucket":
-				var lc := Color(0.20, 0.45, 0.90) if shape == "bucket_w" else Color(1.0, 0.45, 0.08)
+				var lc := Color(0.20, 0.45, 0.90) if shape == "bucket_w" else (Color(0.97, 0.97, 0.94) if shape == "bucket_m" else Color(1.0, 0.45, 0.08))
 				cv.line(4, 6, 12, 6, lc, 1.2)
 		"boat":
 			cv.rect(1, 8, 14, 10, c0)

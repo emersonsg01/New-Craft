@@ -28,6 +28,10 @@ var _station_t := 0.0
 ## Grade de criacao (2x2 no inventario, 3x3 na bancada/bigorna), fornalha aberta e previa do personagem.
 var grid := Inventory.new(9)
 var attrs_open := false
+## Rolagem da grade do criativo (linhas) e area da grade para a roda do mouse.
+var _cscroll := 0
+var _cgrid := Rect2()
+var _crows_max := 0
 var grid_n := 2
 var furnace: Dictionary = {}
 var menus: Menus
@@ -234,7 +238,12 @@ func _gui_input(ev: InputEvent) -> void:
 	if mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 		var dir := 1 if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1
 		if creative and chest == null and furnace.is_empty():
-			_tab = posmod(_tab + dir, _tabs.size())
+			# Sobre a grade rola os itens; fora dela troca de aba.
+			if _cgrid.has_point(mb.position) and _crows_max > 0:
+				_cscroll = clampi(_cscroll + dir, 0, _crows_max)
+			else:
+				_tab = posmod(_tab + dir, _tabs.size())
+				_cscroll = 0
 		else:
 			_rscroll = maxi(0, _rscroll + dir * 2)
 		accept_event()
@@ -249,6 +258,7 @@ func _gui_input(ev: InputEvent) -> void:
 		match e[1]:
 			"tab":
 				_tab = e[2]
+				_cscroll = 0
 			"item":
 				var id: int = e[2]
 				if Items.is_item(id) and Items.def(id)["kind"] == "armor" and mb.shift_pressed:
@@ -626,6 +636,13 @@ func _draw() -> void:
 		draw_rect(r, Color(1, 1, 1, 0.95) if sel else Color(1, 1, 1, 0.22), false, 3.0 if sel else 1.0)
 		draw_stack(player.inv.slots[i], r.get_center() + Vector2(0, 2), 19.0)
 		_text(r.position + Vector2(5, 15), str(i + 1), 12, Color(1, 1, 1, 0.7))
+	# Mao esquerda (X troca com a mao direita).
+	var ro := Rect2(x0 - slot_w - 12, y0, slot_w - 4, slot_w - 4)
+	draw_rect(ro, Color(0.05, 0.06, 0.08, 0.62))
+	draw_rect(ro, Color(0.9, 0.85, 0.6, 0.5), false, 1.5)
+	if int(player.offhand[0]) > 0:
+		draw_stack(player.offhand, ro.get_center() + Vector2(0, 2), 19.0)
+	_text(ro.position + Vector2(4, 15), "X", 12, Color(1, 0.95, 0.7, 0.8))
 	var creative := player.creative()
 	if not creative:
 		for i in 10:
@@ -687,6 +704,10 @@ func _draw() -> void:
 			"seed": label += "  -  Plante em terra arada"
 			"igniter": label += "  -  Acende portais e fogueiras"
 			"boat": label += "  -  Coloque na água"
+			"door": label += "  -  Meio da face: centralizada; perto da borda: encosta"
+			"window": label += "  -  Clique direito coloca"
+			"drawbridge": label += "  -  Coloca 4 x 8; clique direito abaixa/levanta"
+			"saddle": label += "  -  Clique direito num cavalo, burro ou camelo"
 	_text(Vector2(0, y0 - (86 if not creative else 40)), label, 17, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, sz.x)
 
 	for i in _toasts.size():
@@ -696,7 +717,7 @@ func _draw() -> void:
 	if _hint_t > 0.0 and not palette_open:
 		var a := clampf(_hint_t, 0.0, 1.0)
 		_text(Vector2(0, 40), "WASD mover - Espaço pular - Shift correr/agachar - Segure clique esq. para minerar/atacar - dir. usa/constrói", 16, Color(1, 1, 1, a), HORIZONTAL_ALIGNMENT_CENTER, sz.x)
-		_text(Vector2(0, 62), "E inventário - K atributos - T escala (1, 1/2, 1/4, 1/8) - G feitiço - H cura - Q soltar - R forma 3D - V câmera - Esc opções", 16, Color(1, 1, 1, a), HORIZONTAL_ALIGNMENT_CENTER, sz.x)
+		_text(Vector2(0, 62), "E inventário - K atributos - X mão esquerda - B escala (1, 1/2, 1/4, 1/8) - T chat - G feitiço - H cura - Q soltar - R forma 3D - V câmera - Esc opções", 16, Color(1, 1, 1, a), HORIZONTAL_ALIGNMENT_CENTER, sz.x)
 
 	if show_debug and world != null and weather != null:
 		var p := player.position
@@ -1048,8 +1069,23 @@ func _draw_creative(sz: Vector2, cx: float, cy: float) -> void:
 	var gx := px + 12.0
 	var gy := ty + 44.0
 	var hover := 0
+	# Linhas que cabem entre as abas e a hotbar; o resto rola com a roda do mouse.
+	var vis_rows := maxi(1, int((py + ph - 104.0 - gy) / cell))
+	var total_rows := int(ceil(ids.size() / float(cols)))
+	_crows_max = maxi(0, total_rows - vis_rows)
+	_cscroll = clampi(_cscroll, 0, _crows_max)
+	_cgrid = Rect2(gx, gy, cols * cell, vis_rows * cell)
+	if _crows_max > 0:
+		var bh := vis_rows * cell - 6.0
+		var bx := gx + cols * cell + 2.0
+		draw_rect(Rect2(bx, gy, 5, bh), Color(1, 1, 1, 0.08))
+		var th := bh * float(vis_rows) / total_rows
+		draw_rect(Rect2(bx, gy + (bh - th) * float(_cscroll) / _crows_max, 5, th), Color(1, 1, 1, 0.45))
 	for i in ids.size():
-		var r := Rect2(gx + (i % cols) * cell, gy + (i / cols) * cell, cell - 6, cell - 6)
+		var row := i / cols - _cscroll
+		if row < 0 or row >= vis_rows:
+			continue
+		var r := Rect2(gx + (i % cols) * cell, gy + row * cell, cell - 6, cell - 6)
 		var hov := r.has_point(mp)
 		draw_rect(r, Color(1, 1, 1, 0.16) if hov else Color(1, 1, 1, 0.05))
 		draw_icon(ids[i], r.get_center() + Vector2(0, 1), 20.0)
@@ -1068,7 +1104,7 @@ func _draw_creative(sz: Vector2, cx: float, cy: float) -> void:
 		_rects.append([r, "armor", s])
 	var hy := py + ph - 82.0
 	_slot_grid(player.inv, 0, 9, 9, Vector2(gx, hy), cell, mp)
-	var info := "Clique em um item para pôr no espaço %d. Shift+clique veste armadura. Roda troca de aba." % (player.slot + 1)
+	var info := "Clique em um item para pôr no espaço %d. Shift+clique veste armadura. Roda: sobre a grade rola, fora dela troca de aba." % (player.slot + 1)
 	if hover > 0:
 		info = Items.name_of(hover)
 	_text(Vector2(gx, hy - 12), info, 15, Color(0.92, 0.92, 0.95))
